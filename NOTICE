@@ -91,7 +91,8 @@ Tatoeba
   (Romanian cedillas, Vietnamese tone marks for windows-1258, Hebrew in
   reverse order, simplified Chinese chosen as text Big5 cannot represent).
   golden_data_test.mbt contains these sentences encoded in UTF-8, the CJK
-  encodings and single-byte encodings.
+  encodings and single-byte encodings. README.mbt.md and
+  cmd/main/main_wbtest.mbt quote some of them with their ids.
 
 Tools
   tools/golden builds against the crates chardetng 1.0.0 (Apache-2.0 OR MIT)

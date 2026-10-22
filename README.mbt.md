@@ -50,6 +50,11 @@ Implemented:
   encoding_rs 0.8.42, which chardetng uses, on every one- and two-byte input,
   every four-byte GB18030 sequence in the BMP, every EUC-JP sequence for JIS
   X 0212, and the ISO-2022-JP escape sequences.
+- `mbchardet`, a command-line tool (`cmd/main`): for each file, the
+  encoding its byte order mark names if it has one, otherwise the
+  detector's guess, with options for the top-level domain, for denying
+  UTF-8 or ISO-2022-JP, and for listing the scores. See
+  [Command line](#command-line).
 - `Encoding`: the encodings mbchardet reports, with `name()` giving the
   canonical name from the Encoding Standard (`"UTF-8"`, `"windows-1251"`,
   ...) and `Encoding::all()`. These names are valid labels for any decoder
@@ -60,7 +65,8 @@ Planned, not implemented yet:
 - The encoding sniffing steps of the
   [HTML Standard](https://html.spec.whatwg.org/multipage/parsing.html#determining-the-character-encoding):
   byte order mark, transport-layer label, `<meta>` prescan.
-- A command-line tool, and conversion to UTF-8.
+- Conversion to UTF-8 that refuses input it cannot convert without loss,
+  in the library and the command-line tool, and a browser demo.
 
 ## Usage
 
@@ -217,11 +223,47 @@ Input can arrive in chunks: call `feed` for each and set `last=true` on the
 final one, which may be empty. The end of the input counts as a space after
 the last word, so leave `last` unset to score a prefix of a longer stream.
 
+## Command line
+
+`cmd/main` is the `mbchardet` command. `moon run cmd/main --` followed by
+its arguments runs it, on any backend (`--target native` builds a native
+executable). Here `sk.txt` holds the Slovak sentence above in windows-1250,
+`zh.txt` Chinese text in GBK, `bom.csv` a CSV file that starts with a
+UTF-8 byte order mark, and `ascii.txt` plain ASCII:
+
+```
+$ moon run cmd/main -- sk.txt zh.txt bom.csv ascii.txt
+sk.txt: ISO-8859-4
+zh.txt: GBK
+bom.csv: UTF-8 (byte order mark)
+ascii.txt: UTF-8 (ASCII only)
+$ moon run cmd/main -- --tld sk sk.txt
+sk.txt: windows-1250
+```
+
+Each file gets a line with its encoding, followed by `(byte order mark)`
+when the mark decided, `(ASCII only)` when every byte is ASCII, so that any
+encoding the guess could be reads the file the same way, or `(empty)`.
+
+- `--tld LABEL`: the top-level domain the files came from, such as `jp`,
+  in Punycode if internationalized (`xn--p1ai`); case does not matter.
+- `--deny-utf8`: never guess UTF-8. chardetng's documentation asks browsers
+  to do this for HTML from the Web.
+- `--deny-iso-2022-jp`: never guess ISO-2022-JP.
+- `--scores`: also list each encoding's score, highest first, and the
+  encodings ruled out. The scores do not include the `--tld` hint.
+
+Errors go to standard error, or to standard output with wasm-gc, which has
+no standard error in MoonBit. A file that cannot be read makes the exit
+status 1, and an invalid command line makes it 2; unknown options and a
+missing file name also print the help text.
+
 ## Testing
 
-`moon test` runs unit tests and golden tests against data that chardetng
-and encoding_rs themselves produced. The data and the tables are generated,
-and CI checks that regenerating them gives the committed files:
+`moon test` runs unit tests, tests of the command-line tool, and golden
+tests against data that chardetng and encoding_rs themselves produced. The
+data and the tables are generated, and CI checks that regenerating them gives
+the committed files:
 
 - `tools/gen_corpus.py` picks sentences from Tatoeba into `tools/corpus.tsv`.
 - `tools/golden` (Rust, with chardetng 1.0.0 and encoding_rs 0.8.42 pinned
@@ -245,8 +287,13 @@ moon fmt
 
 ## Platforms
 
-mbchardet is pure MoonBit with no dependencies. CI checks and tests it on the
-wasm, wasm-gc, js and native backends, on Linux, macOS and Windows.
+The library is pure MoonBit with no dependencies. The command-line tool also
+uses `moonbitlang/core/argparse` and, to read files, the `fs` and `sys`
+packages of [moonbitlang/x](https://github.com/moonbitlang/x) 0.5.6 (Apache
+2.0); depending on the module downloads moonbitlang/x, which only the tool
+builds. CI checks and tests everything on the wasm, wasm-gc, js and native
+backends, on Linux, macOS and Windows, and runs the tool on sample files with
+each backend.
 
 ## License
 

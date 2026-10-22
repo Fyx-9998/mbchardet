@@ -74,6 +74,40 @@ jobs:
       - name: Test native
         run: moon test --target native
 
+      - name: Command-line tool on every backend
+        shell: bash
+        run: |
+          mkdir cli-samples
+          printf 'Ke\xEF som ju uvidel, zamrelo mi srdce.' > cli-samples/sk.txt
+          printf '\xEF\xBB\xBFname,city\n' > cli-samples/bom.csv
+          printf 'plain ascii\n' > cli-samples/ascii.txt
+          printf '\x1B$B$3$s$K$A$O\x1B(B' > cli-samples/jis.txt
+          printf '%s\n' \
+            'cli-samples/sk.txt: ISO-8859-4' \
+            'cli-samples/bom.csv: UTF-8 (byte order mark)' \
+            'cli-samples/ascii.txt: UTF-8 (ASCII only)' \
+            'cli-samples/jis.txt: ISO-2022-JP' \
+            'cli-samples/sk.txt: windows-1250' \
+            'cli-samples/ascii.txt: windows-1250 (ASCII only)' > cli-samples/expected
+          for target in wasm wasm-gc js native; do
+            echo "::group::$target"
+            {
+              moon run cmd/main --target "$target" -- cli-samples/sk.txt \
+                cli-samples/bom.csv cli-samples/ascii.txt cli-samples/jis.txt
+              moon run cmd/main --target "$target" -- --tld sk --deny-utf8 \
+                cli-samples/sk.txt cli-samples/ascii.txt
+            } > cli-samples/actual
+            diff --strip-trailing-cr cli-samples/expected cli-samples/actual
+            # A file that cannot be read is reported, with exit status 1.
+            status=0
+            moon run cmd/main --target "$target" -- cli-samples/missing.txt \
+              > cli-samples/error 2>&1 || status=$?
+            cat cli-samples/error
+            test "$status" -eq 1
+            grep -q "cli-samples/missing.txt: error:" cli-samples/error
+            echo "::endgroup::"
+          done
+
   chardetng-data:
     name: chardetng data
     runs-on: ubuntu-24.04
