@@ -47,6 +47,11 @@ jobs:
       - name: Toolchain version
         run: moon version --all
 
+      # A new installation has no registry index, which moonbitlang/x, a
+      # dependency of the command-line tool, is resolved from.
+      - name: Fetch the registry index
+        run: moon update
+
       - name: Format check
         run: moon fmt --check
 
