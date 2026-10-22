@@ -37,13 +37,14 @@ What is taken from chardetng 1.0.0:
   - japanese.mbt: the Shift_JIS, EUC-JP and ISO-2022-JP candidates
     (ShiftJisCandidate, EucJpCandidate, Iso2022Candidate) and their
     constants, ported from src/lib.rs.
+  - korean.mbt: the EUC-KR candidate (EucKrCandidate) and its constants,
+    ported from src/lib.rs.
   - detector.mbt: how EncodingDetector feeds candidates (skipping leading
     ASCII, keeping two bytes of context, treating the end of the stream as a
     space) and how find_score reports a score without a top-level domain,
-    ported from src/lib.rs. The EUC-KR candidate and the guess are not
-    ported yet.
+    ported from src/lib.rs. The guess is not ported yet.
   - detector_data.mbt: the byte classification and character-pair score
-    tables and the frequent simplified Hanzi and Kanji, written by
+    tables and the frequent simplified Hanzi, Kanji and Hangul, written by
     tools/gen_data.py
     from src/data.rs without changes. src/data.rs states: "Any copyright is
     dedicated to the Public Domain.
@@ -56,8 +57,9 @@ encoding_rs 0.8.42
   encoding_rs is copyright Mozilla Foundation, licensed under the Apache
   License, Version 2.0 or the MIT license, at your option.
 
-  cjk_decoder.mbt and japanese_decoder.mbt decode GB18030, Big5, Shift_JIS,
-  EUC-JP and ISO-2022-JP as the Encoding Standard specifies; how they report
+  cjk_decoder.mbt, japanese_decoder.mbt and korean_decoder.mbt decode
+  GB18030, Big5, Shift_JIS, EUC-JP, ISO-2022-JP and EUC-KR as the Encoding
+  Standard specifies; how they report
   a malformed sequence byte by byte (its length, and whether a following
   ASCII byte belongs to it) follows the decoders of encoding_rs 0.8.42,
   which chardetng's candidates are fed with. No code is copied.
@@ -69,8 +71,8 @@ WHATWG Encoding Standard
   Copyright © WHATWG (Apple, Google, Mozilla, Microsoft).
 
   cjk_index_data.mbt is written by tools/gen_index.py from index-gb18030.txt,
-  index-gb18030-ranges.txt, index-big5.txt, index-jis0208.txt and
-  index-jis0212.txt of whatwg/encoding commit
+  index-gb18030-ranges.txt, index-big5.txt, index-jis0208.txt,
+  index-jis0212.txt and index-euc-kr.txt of whatwg/encoding commit
   2c3853e461afd718be198772170d024e427aee21, without changes to the mappings.
   The standard is licensed under CC BY 4.0; its portions incorporated into
   source code are licensed under the BSD 3-Clause License, LICENSE-WHATWG.

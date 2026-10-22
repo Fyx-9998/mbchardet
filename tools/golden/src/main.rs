@@ -1,7 +1,7 @@
 //! Writes the golden test data: golden_data_test.mbt, the scores chardetng
 //! 1.0.0 gives the test inputs, and golden_trace_wbtest.mbt, how the GBK,
-//! Big5, Shift_JIS, EUC-JP and ISO-2022-JP decoders of encoding_rs answer
-//! byte by byte.
+//! Big5, Shift_JIS, EUC-JP, ISO-2022-JP and EUC-KR decoders of encoding_rs
+//! answer byte by byte.
 //!
 //!     cargo run --release --manifest-path tools/golden/Cargo.toml -- \
 //!         tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt
@@ -17,21 +17,22 @@
 //! The traces feed byte sequences to a new decoder one byte per call, as
 //! chardetng's candidates do, and hash every answer: the code units written
 //! and whether and how long a sequence was malformed. The sequence sets are
-//! described in `traces` and repeated in cjk_decoder_wbtest.mbt and
-//! japanese_decoder_wbtest.mbt.
+//! described in `traces` and repeated in cjk_decoder_wbtest.mbt,
+//! japanese_decoder_wbtest.mbt and korean_decoder_wbtest.mbt.
 
 use chardetng::{EncodingDetector, Iso2022JpDetection};
 use encoding_rs::*;
 use std::fmt::Write as _;
 use std::fs;
 
-const ENCODINGS: [&Encoding; 25] = [
+const ENCODINGS: [&Encoding; 26] = [
     UTF_8,
     GBK,
     BIG5,
     SHIFT_JIS,
     EUC_JP,
     ISO_2022_JP,
+    EUC_KR,
     WINDOWS_874,
     WINDOWS_1250,
     WINDOWS_1251,
@@ -184,6 +185,10 @@ fn edge_cases() -> Vec<(String, Vec<u8>)> {
         ("ISO-2022-JP bad escape", b"\x1B(Z".to_vec()),
         ("ISO-2022-JP ESC at the end", b"abc\x1B".to_vec()),
         ("ISO-2022-JP shift out", b"\x1B(Ba\x0Eb".to_vec()),
+        ("code page 949 user-defined", b"x\xC9\xA1\xFE\xA1 \xC9\xFE\xFE\xFE".to_vec()),
+        ("MacKorean single bytes", b"\x81a \x84\x80 \x82\xFF x\x80y\xFFz".to_vec()),
+        ("compatibility Hanja after Hangul", b"\xC7\xD1\xCB\xD0".to_vec()),
+        ("EUC-KR truncated", b"\xC7\xD1\xC7".to_vec()),
     ]);
     // A Big5 pair that decodes outside the BMP: the first in pointer order.
     let mut astral = None;
@@ -223,6 +228,14 @@ fn edge_cases() -> Vec<(String, Vec<u8>)> {
         let label = format!("EUC-JP JIS X 0212 pair {:02X} {:02X}", row, last);
         owned.push((label, vec![b'x', 0x8F, row, last, b' ']));
     }
+    // EUC-KR leads around those chardetng takes for MacKorean symbols, with
+    // trail bytes on both sides of 0x7B to 0x7D.
+    for lead in [0xA1, 0xA2, 0xA3, 0xA8, 0xA9, 0xAA, 0xAD, 0xAE] {
+        for trail in [0x7A, 0x7B, 0x7D, 0x7E] {
+            let label = format!("EUC-KR pair {:02X} {:02X}", lead, trail);
+            owned.push((label, vec![b'x', lead, trail, b' ']));
+        }
+    }
     for (label, text, encoding) in [
         ("all-caps Russian", "ПРИВЕТ, МИР. ЭТО ТЕСТ.", KOI8_U),
         ("all-caps Russian", "ПРИВЕТ, МИР. ЭТО ТЕСТ.", WINDOWS_1251),
@@ -239,6 +252,10 @@ fn edge_cases() -> Vec<(String, Vec<u8>)> {
         ("wi and we", "ゐゑヰヱ", EUC_JP),
         ("wi and we", "ゐゑヰヱ", SHIFT_JIS),
         ("Russian", "Привет, мир", SHIFT_JIS),
+        ("long Hangul word", "가나다라마바사아 가나", EUC_KR),
+        ("Hanja after Hangul", "한국韓國", EUC_KR),
+        ("Hangul outside KS X 1001", "똠방각하", EUC_KR),
+        ("Russian", "Привет, мир", EUC_KR),
     ] {
         let mut bytes = encode(text, encoding).expect("edge case must be encodable");
         if label == "truncated UTF-8" {
@@ -269,8 +286,8 @@ impl Fnv {
 /// answer: [0, written, units...] when the byte was consumed, [1, length,
 /// written, units...] for a malformed sequence. GBK and ISO-2022-JP stop at
 /// the first malformed sequence, because chardetng's candidates then reset
-/// the decoder or give up; Big5, Shift_JIS and EUC-JP go on, as their
-/// candidates do. Then the end of the stream: [2, 1] if it is malformed,
+/// the decoder or give up; Big5, Shift_JIS, EUC-JP and EUC-KR go on, as
+/// their candidates do. Then the end of the stream: [2, 1] if it is malformed,
 /// else [2, 0].
 fn trace(encoding: &'static Encoding, sequence: &[u8], hash: &mut Fnv) {
     let mut decoder = encoding.new_decoder_without_bom_handling();
@@ -432,6 +449,7 @@ fn traces() -> String {
         ("big5", BIG5),
         ("shift_jis", SHIFT_JIS),
         ("euc_jp", EUC_JP),
+        ("euc_kr", EUC_KR),
     ] {
         let single = hash_of(encoding, (0u8..=255).map(|b| vec![b]));
         write!(out, "\n///|\nlet golden_{}_single : UInt64 = {}UL\n", name, single).unwrap();
@@ -444,7 +462,12 @@ fn traces() -> String {
         .map(|first| format!("{}UL", hash_of(GBK, gb18030_four_byte(first).into_iter())))
         .collect();
     write!(out, "\n///|\nlet golden_gbk_four_byte : FixedArray[UInt64] = [{}]\n", four.join(", ")).unwrap();
-    for (name, encoding) in [("big5", BIG5), ("shift_jis", SHIFT_JIS), ("euc_jp", EUC_JP)] {
+    for (name, encoding) in [
+        ("big5", BIG5),
+        ("shift_jis", SHIFT_JIS),
+        ("euc_jp", EUC_JP),
+        ("euc_kr", EUC_KR),
+    ] {
         let after = hashes(encoding, leads().map(after));
         write!(out, "\n///|\nlet golden_{}_after : FixedArray[UInt64] = [{}]\n", name, after).unwrap();
     }

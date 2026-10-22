@@ -10,6 +10,7 @@ fn single_byte_encodings() -> Array[@mbchardet.Encoding] {
     @mbchardet.ShiftJis,
     @mbchardet.EucJp,
     @mbchardet.Iso2022Jp,
+    @mbchardet.EucKr,
   ]
   @mbchardet.Encoding::all().filter(e => !multi_byte.contains(e))
 }

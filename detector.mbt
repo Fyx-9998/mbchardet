@@ -1,6 +1,6 @@
 // The detector of chardetng 1.0.0 (EncodingDetector in src/lib.rs,
-// Apache-2.0 OR MIT, Copyright Mozilla Foundation), ported so far without
-// the EUC-KR candidate and without the final guess. See NOTICE.
+// Apache-2.0 OR MIT, Copyright Mozilla Foundation), with all its candidates
+// but without the final guess so far. See NOTICE.
 
 ///|
 priv enum Inner {
@@ -16,6 +16,7 @@ priv enum Inner {
   ShiftJis(ShiftJisCandidate)
   EucJp(EucJpCandidate)
   Iso2022Jp(Iso2022JpCandidate)
+  EucKr(EucKrCandidate)
 }
 
 ///|
@@ -27,8 +28,13 @@ fn Inner::feed_single_byte(self : Inner, buffer : BytesView) -> Int64? {
     ArabicFrench(c) => c.feed(buffer)
     Logical(c) => c.feed(buffer)
     Visual(c) => c.feed(buffer)
-    Utf8Check(_) | Gbk(_) | Big5(_) | ShiftJis(_) | EucJp(_) | Iso2022Jp(_) =>
-      panic()
+    Utf8Check(_)
+    | Gbk(_)
+    | Big5(_)
+    | ShiftJis(_)
+    | EucJp(_)
+    | Iso2022Jp(_)
+    | EucKr(_) => panic()
   }
 }
 
@@ -51,6 +57,7 @@ fn Inner::feed(self : Inner, buffer : BytesView, last : Bool) -> Int64? {
     ShiftJis(c) => return c.feed(buffer, last)
     EucJp(c) => return c.feed(buffer, last)
     Iso2022Jp(c) => return c.feed(buffer, last)
+    EucKr(c) => return c.feed(buffer, last)
     _ => ()
   }
   guard self.feed_single_byte(buffer) is Some(score) else { return None }
@@ -131,7 +138,8 @@ fn Candidate::generic_score(self : Candidate) -> Int64? {
     | Big5(_)
     | ShiftJis(_)
     | EucJp(_)
-    | Iso2022Jp(_) => 2
+    | Iso2022Jp(_)
+    | EucKr(_) => 2
   }
   if longest_word < 2 {
     None
@@ -146,10 +154,9 @@ fn Candidate::generic_score(self : Candidate) -> Int64? {
 ///
 /// This is a port of the detector of chardetng 1.0.0
 /// (<https://github.com/hsivonen/chardetng>), the detector Firefox uses for
-/// unlabeled legacy content. So far it contains chardetng's candidates for
-/// UTF-8, GBK, Big5, Shift_JIS, EUC-JP, ISO-2022-JP and the single-byte
-/// encodings; the EUC-KR candidate, and with it a final guess, are not
-/// ported yet.
+/// unlabeled legacy content. It contains all of chardetng's candidates: UTF-8,
+/// GBK, Big5, Shift_JIS, EUC-JP, ISO-2022-JP, EUC-KR and the single-byte
+/// encodings. chardetng's final guess is not ported yet.
 struct Detector {
   candidates : Array[Candidate]
   mut non_ascii_seen : Int64
@@ -168,8 +175,8 @@ struct Detector {
 /// that decodes a page able to run scripts should not accept ISO-2022-JP,
 /// which can hide markup in escape sequences; email and plain files can.
 pub fn Detector::new(allow_iso_2022_jp~ : Bool = true) -> Detector {
-  // chardetng's candidate order, without the EUC-KR candidate. When two
-  // candidates report the same encoding, `score` uses the first.
+  // chardetng's candidate order. When two candidates report the same
+  // encoding, `score` uses the first.
   let iso_2022_jp = Candidate::new(
     Iso2022Jp(Iso2022JpCandidate::new()),
     Iso2022Jp,
@@ -183,6 +190,7 @@ pub fn Detector::new(allow_iso_2022_jp~ : Bool = true) -> Detector {
     Candidate::single_byte(ISO_8859_8_INDEX),
     Candidate::new(Gbk(GbkCandidate::new()), Gbk),
     Candidate::new(EucJp(EucJpCandidate::new()), EucJp),
+    Candidate::new(EucKr(EucKrCandidate::new()), EucKr),
     Candidate::new(ShiftJis(ShiftJisCandidate::new()), ShiftJis),
     Candidate::new(Big5(Big5Candidate::new()), Big5),
   ]

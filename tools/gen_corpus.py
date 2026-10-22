@@ -79,6 +79,7 @@ LANGUAGES = [
     ("zh-Hant", "cmn", "big5"),
     ("yue", "yue", "big5hkscs"),
     ("ja", "jpn", "cp932"),
+    ("ko", "kor", "cp949"),
 ]
 
 # Combining marks windows-1258 keeps separate from the base letter.

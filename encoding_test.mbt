@@ -8,6 +8,7 @@ test "canonical names" {
   assert_eq(@mbchardet.ShiftJis.name(), "Shift_JIS")
   assert_eq(@mbchardet.EucJp.name(), "EUC-JP")
   assert_eq(@mbchardet.Iso2022Jp.name(), "ISO-2022-JP")
+  assert_eq(@mbchardet.EucKr.name(), "EUC-KR")
   assert_eq(@mbchardet.Windows874.name(), "windows-874")
   assert_eq(@mbchardet.Windows1251.name(), "windows-1251")
   assert_eq(@mbchardet.Iso8859_13.name(), "ISO-8859-13")
@@ -18,7 +19,7 @@ test "canonical names" {
 ///|
 test "every encoding has its own name" {
   let all = @mbchardet.Encoding::all()
-  assert_eq(all.length(), 27)
+  assert_eq(all.length(), 28)
   let names : Set[String] = Set([])
   for encoding in all {
     assert_false(names.contains(encoding.name()))

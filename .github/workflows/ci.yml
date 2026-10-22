@@ -98,7 +98,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/whatwg"
           for f in index-gb18030.txt index-gb18030-ranges.txt index-big5.txt \
-                   index-jis0208.txt index-jis0212.txt; do
+                   index-jis0208.txt index-jis0212.txt index-euc-kr.txt; do
             curl -fsSL -o "$RUNNER_TEMP/whatwg/$f" \
               "https://raw.githubusercontent.com/whatwg/encoding/2c3853e461afd718be198772170d024e427aee21/$f"
           done

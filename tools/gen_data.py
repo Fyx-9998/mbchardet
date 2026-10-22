@@ -4,9 +4,9 @@
 
 Reads the byte classification tables, the character-pair score tables and
 the SINGLE_BYTE_DATA entries from chardetng's data.rs, and the frequent
-characters of the GBK, Shift_JIS and EUC-JP detectors (frequent_simplified,
-frequent_kanji), and writes them without changes. The table of the Korean
-detector (frequent_hangul) is not written yet.
+characters of the GBK, Shift_JIS, EUC-JP and EUC-KR detectors
+(frequent_simplified, frequent_kanji, frequent_hangul), and writes them
+without changes.
 
 The script checks the layout of data.rs instead of guessing: every table
 must have the length its declaration states, every pair table the length
@@ -41,9 +41,8 @@ ENCODINGS = {
     "IBM866_INIT": "Ibm866",
 }
 
-# u16 tables of the CJK detectors that are written, and those not yet.
-CJK_TABLES = ["frequent_simplified", "frequent_kanji"]
-LATER_TABLES = {"frequent_hangul"}
+# u16 tables of the CJK detectors.
+CJK_TABLES = ["frequent_simplified", "frequent_kanji", "frequent_hangul"]
 
 
 def fail(message):
@@ -167,7 +166,7 @@ def main():
         sys.exit(__doc__)
     with open(sys.argv[1], encoding="utf-8") as f:
         tables, records = parse(f.read())
-    unused = set(tables) - set(CJK_TABLES) - LATER_TABLES - {t for r in records for t in r[2:5]}
+    unused = set(tables) - set(CJK_TABLES) - {t for r in records for t in r[2:5]}
     if unused:
         fail(f"tables {sorted(unused)} are neither used nor known CJK tables")
     with open(sys.argv[2], "w", encoding="utf-8", newline="\n") as f:

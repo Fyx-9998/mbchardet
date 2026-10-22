@@ -27,6 +27,7 @@ pub(all) enum Encoding {
   ShiftJis
   EucJp
   Iso2022Jp
+  EucKr
   Windows874
   Windows1250
   Windows1251

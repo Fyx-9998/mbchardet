@@ -6,9 +6,8 @@ they can be decoded correctly instead of turning into mojibake.
 
 ## Status
 
-Early development. The detector scores UTF-8, the Chinese and Japanese
-encodings and the single-byte encodings but does not make a final guess yet,
-and EUC-KR is not covered.
+Early development. The detector scores every encoding chardetng detects but
+does not make a final guess yet.
 
 Implemented:
 
@@ -29,12 +28,13 @@ Implemented:
   `feed`; `score(encoding)` then tells how plausible the input is in that
   encoding, or that it is ruled out. It scores UTF-8, GBK (which covers
   GB18030's four-byte sequences), Big5 (with HKSCS), Shift_JIS, EUC-JP,
-  ISO-2022-JP and 19 single-byte encodings: windows-874, windows-1250 to
-  windows-1258, ISO-8859-2, -4, -5, -6, -7, -8 and -13, KOI8-U and IBM866.
+  ISO-2022-JP, EUC-KR (with the code page 949 extensions) and 19 single-byte
+  encodings: windows-874, windows-1250 to windows-1258, ISO-8859-2, -4, -5,
+  -6, -7, -8 and -13, KOI8-U and IBM866.
   ISO-2022-JP can be ruled out from the start with
   `Detector::new(allow_iso_2022_jp=false)`, as browsers must for pages that
   run scripts. The scores are chardetng's: a golden test compares them with
-  chardetng 1.0.0 on 343 inputs, each fed whole and in chunks of 1, 2, 3 and
+  chardetng 1.0.0 on 392 inputs, each fed whole and in chunks of 1, 2, 3 and
   7 bytes. The CJK candidates use their own decoders, built from the Encoding
   Standard's index tables; a second test compares them with the decoders of
   encoding_rs 0.8.42, which chardetng uses, on every one- and two-byte input,
@@ -47,13 +47,13 @@ Implemented:
 
 Planned, not implemented yet:
 
-- chardetng's candidate for EUC-KR, and its final guess, which compares all
-  candidates, decides for ISO-2022-JP when only escape sequences mark the
-  input as not ASCII, and can take a top-level domain as a hint. Until then,
-  picking the highest score by hand, as in the examples below, only chooses
-  between the encodings above: ISO-2022-JP, for one, scores 0 like every
-  other encoding the input does not rule out. Valid UTF-8 is not proof that
-  UTF-8 was meant; that decision belongs to the guess.
+- chardetng's final guess, which compares all candidates, decides for
+  ISO-2022-JP when only escape sequences mark the input as not ASCII, and
+  can take a top-level domain as a hint. Until then, picking the highest
+  score by hand, as in the examples below, only approximates it:
+  ISO-2022-JP, for one, scores 0 like every other encoding the input does
+  not rule out. Valid UTF-8 is not proof that UTF-8 was meant; that decision
+  belongs to the guess.
 - The encoding sniffing steps of the
   [HTML Standard](https://html.spec.whatwg.org/multipage/parsing.html#determining-the-character-encoding):
   byte order mark, transport-layer label, `<meta>` prescan.
@@ -201,8 +201,8 @@ and CI checks that regenerating them gives the committed files:
   how the CJK decoders of encoding_rs answer byte by byte.
 - `tools/gen_data.py` writes chardetng's tables from its `src/data.rs` to
   `detector_data.mbt`.
-- `tools/gen_index.py` writes the GB18030, Big5, JIS X 0208 and JIS X 0212
-  tables from the index files of the Encoding Standard to
+- `tools/gen_index.py` writes the GB18030, Big5, JIS X 0208, JIS X 0212 and
+  EUC-KR tables from the index files of the Encoding Standard to
   `cjk_index_data.mbt`; its documentation gives the pinned download.
 
 ```

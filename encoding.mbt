@@ -9,6 +9,7 @@ pub(all) enum Encoding {
   ShiftJis
   EucJp
   Iso2022Jp
+  EucKr
   Windows874
   Windows1250
   Windows1251
@@ -44,6 +45,7 @@ pub fn Encoding::name(self : Encoding) -> String {
     ShiftJis => "Shift_JIS"
     EucJp => "EUC-JP"
     Iso2022Jp => "ISO-2022-JP"
+    EucKr => "EUC-KR"
     Windows874 => "windows-874"
     Windows1250 => "windows-1250"
     Windows1251 => "windows-1251"
@@ -78,6 +80,7 @@ pub fn Encoding::all() -> Array[Encoding] {
     ShiftJis,
     EucJp,
     Iso2022Jp,
+    EucKr,
     Windows874,
     Windows1250,
     Windows1251,

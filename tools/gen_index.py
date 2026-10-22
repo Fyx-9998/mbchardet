@@ -1,15 +1,15 @@
-"""Writes the GB18030, Big5 and JIS decoding tables as a MoonBit file.
+"""Writes the GB18030, Big5, JIS and EUC-KR decoding tables as a MoonBit file.
 
     python tools/gen_index.py WHATWG_DIR cjk_index_data.mbt
 
 Reads index-gb18030.txt, index-gb18030-ranges.txt, index-big5.txt,
-index-jis0208.txt and index-jis0212.txt of the WHATWG Encoding Standard
-from WHATWG_DIR. They must be the files of
+index-jis0208.txt, index-jis0212.txt and index-euc-kr.txt of the WHATWG
+Encoding Standard from WHATWG_DIR. They must be the files of
 whatwg/encoding commit 2c3853e461afd718be198772170d024e427aee21 (the
 "Adopt GB18030-2022" change, which the decoders of encoding_rs 0.8.42
 follow); their SHA-256 hashes are checked. Download them with
 
-    for f in index-gb18030.txt index-gb18030-ranges.txt index-big5.txt              index-jis0208.txt index-jis0212.txt; do
+    for f in index-gb18030.txt index-gb18030-ranges.txt index-big5.txt              index-jis0208.txt index-jis0212.txt index-euc-kr.txt; do
       curl -fsSLO https://raw.githubusercontent.com/whatwg/encoding/2c3853e461afd718be198772170d024e427aee21/$f
     done
 
@@ -24,10 +24,11 @@ Output:
   19781, zero where the index has no entry, and big5_astral: one bit per
   pointer for code points in plane 2, the only plane above the BMP Big5
   uses.
-- jis0208_index and jis0212_index: the code point of every pointer from 0
-  to the last one in each index, as two big-endian bytes each, zero where
-  the index has no entry. All are in the BMP. Shift_JIS, EUC-JP and
-  ISO-2022-JP use the first, EUC-JP also the second.
+- jis0208_index, jis0212_index and euc_kr_index: the code point of every
+  pointer from 0 to the last one in each index, as two big-endian bytes
+  each, zero where the index has no entry. All are in the BMP. Shift_JIS,
+  EUC-JP and ISO-2022-JP use the first, EUC-JP also the second, EUC-KR the
+  third.
 """
 
 import hashlib
@@ -40,6 +41,7 @@ FILES = {
     "index-big5.txt": "08e24270c8e95d998c994c03f907e972480dc01f58743e078654cc466203c8ff",
     "index-jis0208.txt": "341dcde7e8b984e9c7bbf5ed75c8da7c6087d47083a1a2b3ed558bfd5bef9468",
     "index-jis0212.txt": "6ac698a473822b282ff4f4d4f17873b970612ef9bd232e03941854c09b67c7ee",
+    "index-euc-kr.txt": "89af20dd867c84cefb710b1790229786cfef2bf11916361a210d81b90381e267",
 }
 
 BIG5_FIRST = 942
@@ -98,6 +100,7 @@ def main():
     big5 = load(directory, "index-big5.txt")
     jis0208 = bmp_table("index-jis0208", load(directory, "index-jis0208.txt"))
     jis0212 = bmp_table("index-jis0212", load(directory, "index-jis0212.txt"))
+    euc_kr = bmp_table("index-euc-kr", load(directory, "index-euc-kr.txt"))
 
     if [p for p, _ in gb18030] != list(range(23940)):
         fail("index-gb18030 does not cover pointers 0 to 23939 exactly")
@@ -162,6 +165,9 @@ def main():
         "",
         "///|",
         "let jis0212_index : Bytes = " + bytes_literal(jis0212),
+        "",
+        "///|",
+        "let euc_kr_index : Bytes = " + bytes_literal(euc_kr),
         "",
     ]
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
