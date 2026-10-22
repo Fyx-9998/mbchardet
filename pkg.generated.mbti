@@ -1,0 +1,25 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "Fyx-9998/mbchardet"
+
+import {
+  "moonbitlang/core/debug",
+}
+
+// Values
+pub fn sniff_bom(BytesView) -> (Encoding, Int32)?
+
+// Errors
+
+// Types and methods
+pub(all) enum Encoding {
+  Utf8
+  Utf16Be
+  Utf16Le
+} derive(Eq, Hash, @debug.Debug)
+pub fn Encoding::name(Self) -> String
+pub fn Encoding::to_string(Self) -> String
+pub impl Show for Encoding
+
+// Type aliases
+
+// Traits

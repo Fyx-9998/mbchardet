@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The toolchain this repository is formatted and tested with. Update it
+  # deliberately: newer releases may format code differently. Versioned
+  # downloads on cli.moonbitlang.com are deleted about 60 days after release,
+  # so this pin has to move forward before then.
+  MOONBIT_INSTALL_VERSION: "0.10.17+093cb8f9c"
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install MoonBit (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Install MoonBit (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+          irm https://cli.moonbitlang.com/install/powershell.ps1 | iex
+          "$env:USERPROFILE\.moon\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Set up MSVC (Windows native backend)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1.13.0
+
+      - name: Toolchain version
+        run: moon version --all
+
+      - name: Format check
+        run: moon fmt --check
+
+      - name: Interface files are up to date
+        shell: bash
+        run: |
+          moon info
+          git diff --exit-code
+
+      - name: Check wasm
+        run: moon check --deny-warn --target wasm
+      - name: Check wasm-gc
+        run: moon check --deny-warn --target wasm-gc
+      - name: Check js
+        run: moon check --deny-warn --target js
+      - name: Check native
+        run: moon check --deny-warn --target native
+
+      - name: Test wasm
+        run: moon test --target wasm
+      - name: Test wasm-gc
+        run: moon test --target wasm-gc
+      - name: Test js
+        run: moon test --target js
+      - name: Test native
+        run: moon test --target native
