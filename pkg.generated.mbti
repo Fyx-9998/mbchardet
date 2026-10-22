@@ -6,6 +6,8 @@ import {
 }
 
 // Values
+pub fn check_utf8(BytesView) -> Utf8Status
+
 pub fn sniff_bom(BytesView) -> (Encoding, Int32)?
 
 // Errors
@@ -19,6 +21,24 @@ pub(all) enum Encoding {
 pub fn Encoding::name(Self) -> String
 pub fn Encoding::to_string(Self) -> String
 pub impl Show for Encoding
+
+pub(all) struct Utf8Error {
+  valid_up_to : Int64
+  error_len : Int32?
+} derive(Eq, @debug.Debug)
+pub fn Utf8Error::to_string(Self) -> String
+pub impl Show for Utf8Error
+
+pub(all) enum Utf8Status {
+  AsciiOnly
+  Valid
+  Invalid(Utf8Error)
+} derive(Eq, @debug.Debug)
+
+type Utf8Validator
+pub fn Utf8Validator::feed(Self, BytesView) -> Bool
+pub fn Utf8Validator::finish(Self) -> Utf8Status
+pub fn Utf8Validator::new() -> Self
 
 // Type aliases
 
