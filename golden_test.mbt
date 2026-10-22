@@ -78,7 +78,7 @@ fn assert_scores(
 ///|
 test "scores match chardetng 1.0.0" {
   let encodings = golden_encodings.map(golden_encoding)
-  assert_eq(golden_cases.length(), 262)
+  assert_eq(golden_cases.length(), 343)
   for case in golden_cases {
     let (label, input, whole, open, chunked) = case
     assert_scores(

@@ -136,7 +136,7 @@ fn gb18030_four_byte(first : Int32) -> Array[Array[Int32]] {
 
 ///|
 /// Each lead, a second byte from the list, then two more bytes.
-fn big5_after(lead : Int32) -> Array[Array[Int32]] {
+fn after(lead : Int32) -> Array[Array[Int32]] {
   let sequences = []
   for second in [0x00, 0x30, 0x7F, 0x80, 0xA0, 0xFF, 0x40, 0xA1] {
     for next in [0x41, 0x81, 0xA4, 0xFF] {
@@ -190,7 +190,7 @@ test "Big5 decoder answers like encoding_rs" {
     assert_hash(
       "two bytes and more",
       lead,
-      hash_of(trace_big5, big5_after(lead)),
+      hash_of(trace_big5, after(lead)),
       expected,
     )
   }

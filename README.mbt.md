@@ -6,9 +6,9 @@ they can be decoded correctly instead of turning into mojibake.
 
 ## Status
 
-Early development. The detector scores UTF-8, GBK, Big5 and the single-byte
-encodings but does not make a final guess yet, and the Japanese and Korean
-encodings are not covered.
+Early development. The detector scores UTF-8, the Chinese and Japanese
+encodings and the single-byte encodings but does not make a final guess yet,
+and EUC-KR is not covered.
 
 Implemented:
 
@@ -28,15 +28,18 @@ Implemented:
   Firefox uses for unlabeled legacy content. Feed it the input in chunks with
   `feed`; `score(encoding)` then tells how plausible the input is in that
   encoding, or that it is ruled out. It scores UTF-8, GBK (which covers
-  GB18030's four-byte sequences), Big5 (with HKSCS) and 19 single-byte
-  encodings: windows-874, windows-1250 to windows-1258, ISO-8859-2, -4, -5,
-  -6, -7, -8 and -13, KOI8-U and IBM866. The scores are chardetng's: a golden
-  test compares them with chardetng 1.0.0 on 262 inputs, each fed whole and
-  in chunks of 1, 2, 3 and 7 bytes. The GBK and Big5 candidates use their
-  own decoders, built from the Encoding Standard's index tables; a second
-  test compares them with the decoders of encoding_rs 0.8.42, which
-  chardetng uses, on every one- and two-byte input and every four-byte
-  GB18030 sequence in the BMP.
+  GB18030's four-byte sequences), Big5 (with HKSCS), Shift_JIS, EUC-JP,
+  ISO-2022-JP and 19 single-byte encodings: windows-874, windows-1250 to
+  windows-1258, ISO-8859-2, -4, -5, -6, -7, -8 and -13, KOI8-U and IBM866.
+  ISO-2022-JP can be ruled out from the start with
+  `Detector::new(allow_iso_2022_jp=false)`, as browsers must for pages that
+  run scripts. The scores are chardetng's: a golden test compares them with
+  chardetng 1.0.0 on 343 inputs, each fed whole and in chunks of 1, 2, 3 and
+  7 bytes. The CJK candidates use their own decoders, built from the Encoding
+  Standard's index tables; a second test compares them with the decoders of
+  encoding_rs 0.8.42, which chardetng uses, on every one- and two-byte input,
+  every four-byte GB18030 sequence in the BMP, every EUC-JP sequence for JIS
+  X 0212, and the ISO-2022-JP escape sequences.
 - `Encoding`: the encodings mbchardet reports, with `name()` giving the
   canonical name from the Encoding Standard (`"UTF-8"`, `"windows-1251"`,
   ...) and `Encoding::all()`. These names are valid labels for any decoder
@@ -44,11 +47,13 @@ Implemented:
 
 Planned, not implemented yet:
 
-- chardetng's candidates for Shift_JIS, EUC-JP, EUC-KR and ISO-2022-JP, and
-  its final guess, which compares all candidates and can take a top-level
-  domain as a hint. Until then, picking the highest score by hand, as in the
-  examples below, only chooses between the encodings above. Valid UTF-8 is
-  not proof that UTF-8 was meant; that decision belongs to the guess.
+- chardetng's candidate for EUC-KR, and its final guess, which compares all
+  candidates, decides for ISO-2022-JP when only escape sequences mark the
+  input as not ASCII, and can take a top-level domain as a hint. Until then,
+  picking the highest score by hand, as in the examples below, only chooses
+  between the encodings above: ISO-2022-JP, for one, scores 0 like every
+  other encoding the input does not rule out. Valid UTF-8 is not proof that
+  UTF-8 was meant; that decision belongs to the guess.
 - The encoding sniffing steps of the
   [HTML Standard](https://html.spec.whatwg.org/multipage/parsing.html#determining-the-character-encoding):
   byte order mark, transport-layer label, `<meta>` prescan.
@@ -155,6 +160,29 @@ test {
 }
 ```
 
+A Japanese sentence in Shift_JIS and in EUC-JP: each scores highest in the
+encoding it was written in, and the other Japanese encoding is ruled out.
+
+```mbt check
+///|
+test {
+  // "それから服を着て、講義用のメモを手さげ鞄に詰め込み、階段を駆け下りた。",
+  // Tatoeba sentence 205905 (CC BY 2.0 FR).
+  let shift_jis = b"\x82\xBB\x82\xEA\x82\xA9\x82\xE7\x95\x9E\x82\xF0\x92\x85\x82\xC4\x81A\x8Du\x8B`\x97p\x82\xCC\x83\x81\x83\x82\x82\xF0\x8E\xE8\x82\xB3\x82\xB0\x8A\x93\x82\xC9\x8Bl\x82\xDF\x8D\x9E\x82\xDD\x81A\x8AK\x92i\x82\xF0\x8B\xEC\x82\xAF\x89\xBA\x82\xE8\x82\xBD\x81B"
+  let euc_jp = b"\xA4\xBD\xA4\xEC\xA4\xAB\xA4\xE9\xC9\xFE\xA4\xF2\xC3\xE5\xA4\xC6\xA1\xA2\xB9\xD6\xB5\xC1\xCD\xD1\xA4\xCE\xA5\xE1\xA5\xE2\xA4\xF2\xBC\xEA\xA4\xB5\xA4\xB2\xB3\xF3\xA4\xCB\xB5\xCD\xA4\xE1\xB9\xFE\xA4\xDF\xA1\xA2\xB3\xAC\xC3\xCA\xA4\xF2\xB6\xEE\xA4\xB1\xB2\xBC\xA4\xEA\xA4\xBF\xA1\xA3"
+  let detector = @mbchardet.Detector::new()
+  detector.feed(shift_jis[:], last=true) |> ignore
+  assert_eq(detector.score(@mbchardet.ShiftJis), Some(986))
+  assert_eq(detector.score(@mbchardet.Gbk), Some(175))
+  assert_eq(detector.score(@mbchardet.EucJp), None)
+  let detector = @mbchardet.Detector::new()
+  detector.feed(euc_jp[:], last=true) |> ignore
+  assert_eq(detector.score(@mbchardet.EucJp), Some(1618))
+  assert_eq(detector.score(@mbchardet.Big5), Some(1285))
+  assert_eq(detector.score(@mbchardet.ShiftJis), Some(-4193))
+}
+```
+
 Input can arrive in chunks: call `feed` for each and set `last=true` on the
 final one, which may be empty. The end of the input counts as a space after
 the last word, so leave `last` unset to score a prefix of a longer stream.
@@ -170,12 +198,12 @@ and CI checks that regenerating them gives the committed files:
   in `Cargo.lock`) encodes each sentence in every encoding that can
   represent it, adds edge cases, and writes chardetng's scores to
   `golden_data_test.mbt`. It also writes `golden_trace_wbtest.mbt`, hashes of
-  how the GBK and Big5 decoders of encoding_rs answer byte by byte.
+  how the CJK decoders of encoding_rs answer byte by byte.
 - `tools/gen_data.py` writes chardetng's tables from its `src/data.rs` to
   `detector_data.mbt`.
-- `tools/gen_index.py` writes the GB18030 and Big5 tables from the index
-  files of the Encoding Standard to `cjk_index_data.mbt`; its documentation
-  gives the pinned download.
+- `tools/gen_index.py` writes the GB18030, Big5, JIS X 0208 and JIS X 0212
+  tables from the index files of the Encoding Standard to
+  `cjk_index_data.mbt`; its documentation gives the pinned download.
 
 ```
 python tools/gen_corpus.py CACHE_DIR tools/corpus.tsv

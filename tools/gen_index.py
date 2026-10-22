@@ -1,14 +1,15 @@
-"""Writes the GB18030 and Big5 decoding tables as a MoonBit file.
+"""Writes the GB18030, Big5 and JIS decoding tables as a MoonBit file.
 
     python tools/gen_index.py WHATWG_DIR cjk_index_data.mbt
 
-Reads index-gb18030.txt, index-gb18030-ranges.txt and index-big5.txt of
-the WHATWG Encoding Standard from WHATWG_DIR. They must be the files of
+Reads index-gb18030.txt, index-gb18030-ranges.txt, index-big5.txt,
+index-jis0208.txt and index-jis0212.txt of the WHATWG Encoding Standard
+from WHATWG_DIR. They must be the files of
 whatwg/encoding commit 2c3853e461afd718be198772170d024e427aee21 (the
 "Adopt GB18030-2022" change, which the decoders of encoding_rs 0.8.42
 follow); their SHA-256 hashes are checked. Download them with
 
-    for f in index-gb18030.txt index-gb18030-ranges.txt index-big5.txt; do
+    for f in index-gb18030.txt index-gb18030-ranges.txt index-big5.txt              index-jis0208.txt index-jis0212.txt; do
       curl -fsSLO https://raw.githubusercontent.com/whatwg/encoding/2c3853e461afd718be198772170d024e427aee21/$f
     done
 
@@ -23,6 +24,10 @@ Output:
   19781, zero where the index has no entry, and big5_astral: one bit per
   pointer for code points in plane 2, the only plane above the BMP Big5
   uses.
+- jis0208_index and jis0212_index: the code point of every pointer from 0
+  to the last one in each index, as two big-endian bytes each, zero where
+  the index has no entry. All are in the BMP. Shift_JIS, EUC-JP and
+  ISO-2022-JP use the first, EUC-JP also the second.
 """
 
 import hashlib
@@ -33,6 +38,8 @@ FILES = {
     "index-gb18030.txt": "746b3c55f1a8ec4b90b451f384437a17fd37cd51cd668456a28071a758d10784",
     "index-gb18030-ranges.txt": "874c6b6f6f74cf7d427ad228d5b41ddd9354fffd92a2259bf429f86e6baa7a1e",
     "index-big5.txt": "08e24270c8e95d998c994c03f907e972480dc01f58743e078654cc466203c8ff",
+    "index-jis0208.txt": "341dcde7e8b984e9c7bbf5ed75c8da7c6087d47083a1a2b3ed558bfd5bef9468",
+    "index-jis0212.txt": "6ac698a473822b282ff4f4d4f17873b970612ef9bd232e03941854c09b67c7ee",
 }
 
 BIG5_FIRST = 942
@@ -58,6 +65,20 @@ def load(directory, name):
     return rows
 
 
+def bmp_table(name, rows):
+    """Two big-endian bytes per pointer 0 to the last, zero for no entry."""
+    pointers = [p for p, _ in rows]
+    if len(set(pointers)) != len(pointers):
+        fail(f"{name} has duplicate pointers")
+    if any(c == 0 or c > 0xFFFF or 0xD800 <= c < 0xE000 for _, c in rows):
+        fail(f"{name} maps to U+0000, a surrogate or above the BMP")
+    table = [0] * (2 * (max(pointers) + 1))
+    for p, c in rows:
+        table[2 * p] = c >> 8
+        table[2 * p + 1] = c & 0xFF
+    return table
+
+
 def bytes_literal(values):
     """A Bytes expression, split into literals of 4096 bytes joined with +
     because MoonBit limits the length of a line."""
@@ -75,6 +96,8 @@ def main():
     gb18030 = load(directory, "index-gb18030.txt")
     ranges = load(directory, "index-gb18030-ranges.txt")
     big5 = load(directory, "index-big5.txt")
+    jis0208 = bmp_table("index-jis0208", load(directory, "index-jis0208.txt"))
+    jis0212 = bmp_table("index-jis0212", load(directory, "index-jis0212.txt"))
 
     if [p for p, _ in gb18030] != list(range(23940)):
         fail("index-gb18030 does not cover pointers 0 to 23939 exactly")
@@ -133,6 +156,12 @@ def main():
         "",
         "///|",
         "let big5_astral : Bytes = " + bytes_literal(big5_astral),
+        "",
+        "///|",
+        "let jis0208_index : Bytes = " + bytes_literal(jis0208),
+        "",
+        "///|",
+        "let jis0212_index : Bytes = " + bytes_literal(jis0212),
         "",
     ]
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:

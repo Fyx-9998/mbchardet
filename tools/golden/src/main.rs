@@ -1,6 +1,7 @@
 //! Writes the golden test data: golden_data_test.mbt, the scores chardetng
-//! 1.0.0 gives the test inputs, and golden_trace_wbtest.mbt, how the GBK and
-//! Big5 decoders of encoding_rs answer byte by byte.
+//! 1.0.0 gives the test inputs, and golden_trace_wbtest.mbt, how the GBK,
+//! Big5, Shift_JIS, EUC-JP and ISO-2022-JP decoders of encoding_rs answer
+//! byte by byte.
 //!
 //!     cargo run --release --manifest-path tools/golden/Cargo.toml -- \
 //!         tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt
@@ -16,17 +17,21 @@
 //! The traces feed byte sequences to a new decoder one byte per call, as
 //! chardetng's candidates do, and hash every answer: the code units written
 //! and whether and how long a sequence was malformed. The sequence sets are
-//! described in `traces` and repeated in cjk_decoder_wbtest.mbt.
+//! described in `traces` and repeated in cjk_decoder_wbtest.mbt and
+//! japanese_decoder_wbtest.mbt.
 
 use chardetng::{EncodingDetector, Iso2022JpDetection};
 use encoding_rs::*;
 use std::fmt::Write as _;
 use std::fs;
 
-const ENCODINGS: [&Encoding; 22] = [
+const ENCODINGS: [&Encoding; 25] = [
     UTF_8,
     GBK,
     BIG5,
+    SHIFT_JIS,
+    EUC_JP,
+    ISO_2022_JP,
     WINDOWS_874,
     WINDOWS_1250,
     WINDOWS_1251,
@@ -149,6 +154,36 @@ fn edge_cases() -> Vec<(String, Vec<u8>)> {
         ("lone FF and 80", b"\xFFa\x80".to_vec()),
         ("Big5 lead then space", b"\xA4 \xA4\x40".to_vec()),
         ("Big5 truncated", b"\xA7\x41\xA7".to_vec()),
+        (
+            "half-width katakana",
+            b"\xB6\xDE\xC0\xB6\xC5 \xCA\xDF\xB0\xC3\xA8 \xB1\xDE".to_vec(),
+        ),
+        // Voicing marks after the first and last katakana that take them, and
+        // after the ones next to those that do not.
+        (
+            "half-width voicing marks",
+            b"\xB3\xDE \xB2\xDE \xC4\xDE \xC5\xDE \xCA\xDF \xC9\xDF \xCE\xDF \xCF\xDF".to_vec(),
+        ),
+        ("EUC-JP half-width katakana", b"\x8E\xB6\x8E\xDE\x8E\xCA\x8E\xDF".to_vec()),
+        (
+            "EUC-JP half-width voicing marks",
+            b"\x8E\xB3\x8E\xDE \x8E\xC5\x8E\xDE \x8E\xCF\x8E\xDF".to_vec(),
+        ),
+        ("Shift_JIS 0x80", b"x\x80y".to_vec()),
+        ("Shift_JIS user-defined", b"\xF0\x40\xF9\xFC".to_vec()),
+        ("Shift_JIS extensions", b"\x85\x40\x88\x40 \xFD\xA0".to_vec()),
+        ("Shift_JIS excluded pair", b"\x82\xFA".to_vec()),
+        ("Shift_JIS truncated", b"\x82\xA0\x82".to_vec()),
+        ("JIS X 0212", b"\x8F\xB0\xA1\x8F\xA2\xAF".to_vec()),
+        ("EUC-JP extension pair", b"\xA9\xA1 x".to_vec()),
+        ("EUC-JP excluded pair", b"\xAD\xD8".to_vec()),
+        ("EUC-JP truncated", b"\xA4\xA2\xA4".to_vec()),
+        ("ISO-2022-JP", b"\x1B$B$3$s\x1B(B abc".to_vec()),
+        ("ISO-2022-JP Roman and katakana", b"\x1B(J\\~\x1B(I12\x1B(B".to_vec()),
+        ("ISO-2022-JP consecutive escapes", b"\x1B$B\x1B(B".to_vec()),
+        ("ISO-2022-JP bad escape", b"\x1B(Z".to_vec()),
+        ("ISO-2022-JP ESC at the end", b"abc\x1B".to_vec()),
+        ("ISO-2022-JP shift out", b"\x1B(Ba\x0Eb".to_vec()),
     ]);
     // A Big5 pair that decodes outside the BMP: the first in pointer order.
     let mut astral = None;
@@ -167,6 +202,27 @@ fn edge_cases() -> Vec<(String, Vec<u8>)> {
         .into_iter()
         .map(|(label, bytes)| (label.to_string(), bytes))
         .collect();
+    // Pairs on both sides of the edges of the ranges chardetng treats as
+    // extensions or excludes from them, one input each.
+    let shift_jis_pairs = [
+        [0x82, 0xF9], [0x82, 0xFA], [0x84, 0xDC], [0x84, 0xDD], [0x84, 0xE4], [0x84, 0xE5],
+        [0x84, 0xFA], [0x84, 0xFB], [0x86, 0xF1], [0x86, 0xF2], [0x86, 0xFA], [0x86, 0xFB],
+        [0x87, 0x76], [0x87, 0x77], [0x87, 0x7D], [0x87, 0x7E], [0xFC, 0xF4], [0xFC, 0xF5],
+    ];
+    let euc_jp_pairs = [
+        [0xA8, 0xDE], [0xA8, 0xDF], [0xA8, 0xE6], [0xA8, 0xE7], [0xAC, 0xF3], [0xAC, 0xF4],
+        [0xAC, 0xFC], [0xAC, 0xFD], [0xAD, 0xD7], [0xAD, 0xD8], [0xAD, 0xDE], [0xAD, 0xDF],
+    ];
+    for (encoding, pairs) in [("Shift_JIS", &shift_jis_pairs[..]), ("EUC-JP", &euc_jp_pairs[..])] {
+        for pair in pairs {
+            let label = format!("{} pair {:02X} {:02X}", encoding, pair[0], pair[1]);
+            owned.push((label, vec![b'x', pair[0], pair[1], b' ']));
+        }
+    }
+    for (row, last) in [(0xA2, 0xA1), (0xA3, 0xA1), (0xED, 0xFE), (0xFE, 0xF6), (0xFE, 0xF7)] {
+        let label = format!("EUC-JP JIS X 0212 pair {:02X} {:02X}", row, last);
+        owned.push((label, vec![b'x', 0x8F, row, last, b' ']));
+    }
     for (label, text, encoding) in [
         ("all-caps Russian", "ПРИВЕТ, МИР. ЭТО ТЕСТ.", KOI8_U),
         ("all-caps Russian", "ПРИВЕТ, МИР. ЭТО ТЕСТ.", WINDOWS_1251),
@@ -179,6 +235,10 @@ fn edge_cases() -> Vec<(String, Vec<u8>)> {
         ("Russian", "Привет, мир", GBK),
         ("Russian", "Привет, мир", BIG5),
         ("Hanzi next to Latin", "用UTF-8編碼的文字", BIG5),
+        ("Kanji next to Latin", "UTF-8で書かれた文書", SHIFT_JIS),
+        ("wi and we", "ゐゑヰヱ", EUC_JP),
+        ("wi and we", "ゐゑヰヱ", SHIFT_JIS),
+        ("Russian", "Привет, мир", SHIFT_JIS),
     ] {
         let mut bytes = encode(text, encoding).expect("edge case must be encodable");
         if label == "truncated UTF-8" {
@@ -207,10 +267,11 @@ impl Fnv {
 
 /// Feeds `sequence` to a new decoder one byte per call and hashes each
 /// answer: [0, written, units...] when the byte was consumed, [1, length,
-/// written, units...] for a malformed sequence. GBK stops at the first
-/// malformed sequence, because chardetng's GBK candidate then resets the
-/// decoder or gives up; Big5 goes on, as its candidate does. Then the end of
-/// the stream: [2, 1] if it is malformed, else [2, 0].
+/// written, units...] for a malformed sequence. GBK and ISO-2022-JP stop at
+/// the first malformed sequence, because chardetng's candidates then reset
+/// the decoder or give up; Big5, Shift_JIS and EUC-JP go on, as their
+/// candidates do. Then the end of the stream: [2, 1] if it is malformed,
+/// else [2, 0].
 fn trace(encoding: &'static Encoding, sequence: &[u8], hash: &mut Fnv) {
     let mut decoder = encoding.new_decoder_without_bom_handling();
     let mut dst = [0u16; 2];
@@ -231,7 +292,9 @@ fn trace(encoding: &'static Encoding, sequence: &[u8], hash: &mut Fnv) {
         for &u in &dst[..written] {
             hash.word(u32::from(u));
         }
-        if encoding == GBK && matches!(result, DecoderResult::Malformed(..)) {
+        if (encoding == GBK || encoding == ISO_2022_JP)
+            && matches!(result, DecoderResult::Malformed(..))
+        {
             return;
         }
     }
@@ -279,9 +342,9 @@ fn gb18030_four_byte(first: u8) -> Vec<Vec<u8>> {
     sequences
 }
 
-/// Big5 after an error or a character: each lead, a second byte from the
-/// list, then two more bytes.
-fn big5_after(lead: u8) -> Vec<Vec<u8>> {
+/// After an error or a character: each lead, a second byte from the list,
+/// then two more bytes.
+fn after(lead: u8) -> Vec<Vec<u8>> {
     let mut sequences = Vec::new();
     for second in [0x00, 0x30, 0x7F, 0x80, 0xA0, 0xFF, 0x40, 0xA1] {
         for next in [0x41, 0x81, 0xA4, 0xFF] {
@@ -291,13 +354,85 @@ fn big5_after(lead: u8) -> Vec<Vec<u8>> {
     sequences
 }
 
+/// EUC-JP JIS X 0212: 0x8F, a lead, then every byte.
+fn jis0212(lead: u8) -> Vec<Vec<u8>> {
+    (0u8..=255).map(|t| vec![0x8F, lead, t]).collect()
+}
+
+/// The ISO-2022-JP escape sequences that select ASCII, Roman, katakana and
+/// JIS X 0208 (two of them).
+const DESIGNATIONS: [[u8; 3]; 5] = [
+    [0x1B, 0x28, 0x42],
+    [0x1B, 0x28, 0x4A],
+    [0x1B, 0x28, 0x49],
+    [0x1B, 0x24, 0x40],
+    [0x1B, 0x24, 0x42],
+];
+
+/// ESC followed by every byte, and ESC ( and ESC $ followed by every byte.
+fn iso_2022_jp_escapes() -> Vec<Vec<u8>> {
+    let mut sequences = Vec::new();
+    for x in 0u8..=255 {
+        sequences.push(vec![0x1B, x]);
+        sequences.push(vec![0x1B, 0x28, x]);
+        sequences.push(vec![0x1B, 0x24, x]);
+    }
+    sequences
+}
+
+/// A designation followed by every byte.
+fn iso_2022_jp_after(designation: [u8; 3]) -> Vec<Vec<u8>> {
+    (0u8..=255).map(|b| [&designation[..], &[b]].concat()).collect()
+}
+
+/// JIS X 0208 selected, a lead, then every byte.
+fn iso_2022_jp_jis0208(lead: u8) -> Vec<Vec<u8>> {
+    (0u8..=255).map(|t| vec![0x1B, 0x24, 0x42, lead, t]).collect()
+}
+
+/// Pairs of designations with nothing, a letter, a JIS X 0208 pair or a
+/// lone lead between them, then inputs that end inside a sequence.
+fn iso_2022_jp_sequences() -> Vec<Vec<u8>> {
+    let mut sequences = Vec::new();
+    for first in DESIGNATIONS {
+        for second in DESIGNATIONS {
+            for between in [&b""[..], b"\x41", b"\x21\x21", b"\x21"] {
+                sequences.push([&first[..], between, &second[..]].concat());
+            }
+        }
+    }
+    for tail in [
+        &b"\x1B"[..],
+        b"\x1B\x28",
+        b"\x1B\x24",
+        b"\x1B\x24\x42\x30",
+        b"\x41\x1B",
+        b"\x1B\x28\x42\x41",
+    ] {
+        sequences.push(tail.to_vec());
+    }
+    sequences
+}
+
+fn hashes(encoding: &'static Encoding, groups: impl Iterator<Item = Vec<Vec<u8>>>) -> String {
+    groups
+        .map(|group| format!("{}UL", hash_of(encoding, group.into_iter())))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn traces() -> String {
     let mut out = String::new();
     out.push_str("// Generated by tools/golden from encoding_rs 0.8.42. Do not edit.\n");
-    out.push_str("// FNV-1a hashes of how its GBK and Big5 decoders answer the byte\n");
-    out.push_str("// sequences that cjk_decoder_wbtest.mbt describes.\n");
+    out.push_str("// FNV-1a hashes of how its CJK decoders answer the byte sequences\n");
+    out.push_str("// that cjk_decoder_wbtest.mbt and japanese_decoder_wbtest.mbt describe.\n");
     let leads = || 0x81u8..=0xFE;
-    for (name, encoding) in [("gbk", GBK), ("big5", BIG5)] {
+    for (name, encoding) in [
+        ("gbk", GBK),
+        ("big5", BIG5),
+        ("shift_jis", SHIFT_JIS),
+        ("euc_jp", EUC_JP),
+    ] {
         let single = hash_of(encoding, (0u8..=255).map(|b| vec![b]));
         write!(out, "\n///|\nlet golden_{}_single : UInt64 = {}UL\n", name, single).unwrap();
         let pairs: Vec<String> = leads()
@@ -309,10 +444,22 @@ fn traces() -> String {
         .map(|first| format!("{}UL", hash_of(GBK, gb18030_four_byte(first).into_iter())))
         .collect();
     write!(out, "\n///|\nlet golden_gbk_four_byte : FixedArray[UInt64] = [{}]\n", four.join(", ")).unwrap();
-    let after: Vec<String> = leads()
-        .map(|lead| format!("{}UL", hash_of(BIG5, big5_after(lead).into_iter())))
-        .collect();
-    write!(out, "\n///|\nlet golden_big5_after : FixedArray[UInt64] = [{}]\n", after.join(", ")).unwrap();
+    for (name, encoding) in [("big5", BIG5), ("shift_jis", SHIFT_JIS), ("euc_jp", EUC_JP)] {
+        let after = hashes(encoding, leads().map(after));
+        write!(out, "\n///|\nlet golden_{}_after : FixedArray[UInt64] = [{}]\n", name, after).unwrap();
+    }
+    let jis0212_hashes = hashes(EUC_JP, (0xA1u8..=0xFE).map(jis0212));
+    write!(out, "\n///|\nlet golden_euc_jp_jis0212 : FixedArray[UInt64] = [{}]\n", jis0212_hashes).unwrap();
+    let single = hash_of(ISO_2022_JP, (0u8..=255).map(|b| vec![b]));
+    write!(out, "\n///|\nlet golden_iso_2022_jp_single : UInt64 = {}UL\n", single).unwrap();
+    let escapes = hash_of(ISO_2022_JP, iso_2022_jp_escapes().into_iter());
+    write!(out, "\n///|\nlet golden_iso_2022_jp_escapes : UInt64 = {}UL\n", escapes).unwrap();
+    let designations = hashes(ISO_2022_JP, DESIGNATIONS.into_iter().map(iso_2022_jp_after));
+    write!(out, "\n///|\nlet golden_iso_2022_jp_designations : FixedArray[UInt64] = [{}]\n", designations).unwrap();
+    let jis0208_hashes = hashes(ISO_2022_JP, (0x21u8..=0x7E).map(iso_2022_jp_jis0208));
+    write!(out, "\n///|\nlet golden_iso_2022_jp_jis0208 : FixedArray[UInt64] = [{}]\n", jis0208_hashes).unwrap();
+    let sequences = hash_of(ISO_2022_JP, iso_2022_jp_sequences().into_iter());
+    write!(out, "\n///|\nlet golden_iso_2022_jp_sequences : UInt64 = {}UL\n", sequences).unwrap();
     out
 }
 

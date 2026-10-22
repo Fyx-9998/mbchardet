@@ -6,6 +6,9 @@ pub(all) enum Encoding {
   Utf16Le
   Gbk
   Big5
+  ShiftJis
+  EucJp
+  Iso2022Jp
   Windows874
   Windows1250
   Windows1251
@@ -38,6 +41,9 @@ pub fn Encoding::name(self : Encoding) -> String {
     Utf16Le => "UTF-16LE"
     Gbk => "GBK"
     Big5 => "Big5"
+    ShiftJis => "Shift_JIS"
+    EucJp => "EUC-JP"
+    Iso2022Jp => "ISO-2022-JP"
     Windows874 => "windows-874"
     Windows1250 => "windows-1250"
     Windows1251 => "windows-1251"
@@ -69,6 +75,9 @@ pub fn Encoding::all() -> Array[Encoding] {
     Utf16Le,
     Gbk,
     Big5,
+    ShiftJis,
+    EucJp,
+    Iso2022Jp,
     Windows874,
     Windows1250,
     Windows1251,

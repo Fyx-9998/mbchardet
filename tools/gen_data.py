@@ -4,9 +4,9 @@
 
 Reads the byte classification tables, the character-pair score tables and
 the SINGLE_BYTE_DATA entries from chardetng's data.rs, and the frequent
-Hanzi of the GBK detector (frequent_simplified), and writes them without
-changes. The tables of the Japanese and Korean detectors (frequent_kanji,
-frequent_hangul) are not written yet.
+characters of the GBK, Shift_JIS and EUC-JP detectors (frequent_simplified,
+frequent_kanji), and writes them without changes. The table of the Korean
+detector (frequent_hangul) is not written yet.
 
 The script checks the layout of data.rs instead of guessing: every table
 must have the length its declaration states, every pair table the length
@@ -42,8 +42,8 @@ ENCODINGS = {
 }
 
 # u16 tables of the CJK detectors that are written, and those not yet.
-CJK_TABLES = ["frequent_simplified"]
-LATER_TABLES = {"frequent_kanji", "frequent_hangul"}
+CJK_TABLES = ["frequent_simplified", "frequent_kanji"]
+LATER_TABLES = {"frequent_hangul"}
 
 
 def fail(message):

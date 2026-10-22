@@ -7,6 +7,9 @@ fn single_byte_encodings() -> Array[@mbchardet.Encoding] {
     @mbchardet.Utf16Le,
     @mbchardet.Gbk,
     @mbchardet.Big5,
+    @mbchardet.ShiftJis,
+    @mbchardet.EucJp,
+    @mbchardet.Iso2022Jp,
   ]
   @mbchardet.Encoding::all().filter(e => !multi_byte.contains(e))
 }
@@ -36,6 +39,21 @@ test "a new detector" {
   // UTF-16 is only recognized by its byte order mark.
   assert_eq(detector.score(@mbchardet.Utf16Le), None)
   assert_eq(detector.score(@mbchardet.Utf16Be), None)
+  assert_eq(detector.score(@mbchardet.Iso2022Jp), Some(0))
+}
+
+///|
+test "ISO-2022-JP can be ruled out from the start" {
+  // こんにちは in ISO-2022-JP
+  let data = b"\x1B$B$3$s$K$A$O\x1B(B"
+  let allowed = @mbchardet.Detector::new()
+  allowed.feed(data[:], last=true) |> ignore
+  assert_eq(allowed.score(@mbchardet.Iso2022Jp), Some(0))
+  let denied = @mbchardet.Detector::new(allow_iso_2022_jp=false)
+  denied.feed(data[:], last=true) |> ignore
+  assert_eq(denied.score(@mbchardet.Iso2022Jp), None)
+  // The other candidates do not change.
+  assert_eq(denied.score(@mbchardet.Utf8), allowed.score(@mbchardet.Utf8))
 }
 
 ///|

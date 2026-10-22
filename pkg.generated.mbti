@@ -15,7 +15,7 @@ pub fn sniff_bom(BytesView) -> (Encoding, Int32)?
 // Types and methods
 type Detector
 pub fn Detector::feed(Self, BytesView, last? : Bool) -> Bool
-pub fn Detector::new() -> Self
+pub fn Detector::new(allow_iso_2022_jp? : Bool) -> Self
 pub fn Detector::score(Self, Encoding) -> Int64?
 
 pub(all) enum Encoding {
@@ -24,6 +24,9 @@ pub(all) enum Encoding {
   Utf16Le
   Gbk
   Big5
+  ShiftJis
+  EucJp
+  Iso2022Jp
   Windows874
   Windows1250
   Windows1251
