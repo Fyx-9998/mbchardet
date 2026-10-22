@@ -1,6 +1,5 @@
 // The detector of chardetng 1.0.0 (EncodingDetector in src/lib.rs,
-// Apache-2.0 OR MIT, Copyright Mozilla Foundation), with all its candidates
-// but without the final guess so far. See NOTICE.
+// Apache-2.0 OR MIT, Copyright Mozilla Foundation). See NOTICE.
 
 ///|
 priv enum Inner {
@@ -123,28 +122,54 @@ fn Candidate::feed(self : Candidate, buffer : BytesView, last : Bool) -> Unit {
 }
 
 ///|
-/// The score without a top-level domain hint, as `find_score` in chardetng
-/// computes it.
-fn Candidate::generic_score(self : Candidate) -> Int64? {
+/// The score of the candidate at position `encoding` under `tld`, as
+/// `Candidate::score` in chardetng computes it. `expectation_is_valid` tells
+/// whether an encoding native to `tld` is still possible.
+fn Candidate::score_for(
+  self : Candidate,
+  encoding : Int32,
+  tld : Tld,
+  expectation_is_valid : Bool,
+) -> Int64? {
+  // Encodings of non-Latin scripts need a word of at least two letters;
+  // all but the cased ones are exempt when the TLD expects them.
   let longest_word = match self.inner {
-    NonLatinCased(c) => c.longest_word
-    Caseless(c) => c.longest_word
-    ArabicFrench(c) => c.longest_word
-    Logical(c) => c.longest_word
-    Visual(c) => c.longest_word
-    Utf8Check(_)
-    | Latin(_)
-    | Gbk(_)
-    | Big5(_)
-    | ShiftJis(_)
-    | EucJp(_)
-    | Iso2022Jp(_)
-    | EucKr(_) => 2
+    NonLatinCased(c) => Some((c.longest_word, false))
+    Caseless(c) => Some((c.longest_word, true))
+    ArabicFrench(c) => Some((c.longest_word, true))
+    Logical(c) => Some((c.longest_word, true))
+    Visual(c) => Some((c.longest_word, true))
+    _ => None
   }
-  if longest_word < 2 {
-    None
-  } else {
-    self.score
+  if longest_word is Some((length, native_exempt)) &&
+    length < 2 &&
+    !(native_exempt && encoding_is_native_to_tld(tld, encoding)) {
+    return None
+  }
+  if tld == Generic {
+    return self.score
+  }
+  guard self.score is Some(score) else { return None }
+  if encoding == encoding_for_tld(tld) {
+    return Some(score + 1)
+  }
+  if encoding_is_native_to_tld(tld, encoding) {
+    return Some(score)
+  }
+  if expectation_is_valid {
+    return Some(score - score_adjustment(score, encoding, tld))
+  }
+  // If the expectation is no longer valid, fall back to generic behavior.
+  Some(score)
+}
+
+///|
+/// The punctuation count of a Hebrew candidate.
+fn Candidate::plausible_punctuation(self : Candidate) -> Int64 {
+  match self.inner {
+    Logical(c) => c.plausible_punctuation
+    Visual(c) => c.plausible_punctuation
+    _ => panic()
   }
 }
 
@@ -154,9 +179,9 @@ fn Candidate::generic_score(self : Candidate) -> Int64? {
 ///
 /// This is a port of the detector of chardetng 1.0.0
 /// (<https://github.com/hsivonen/chardetng>), the detector Firefox uses for
-/// unlabeled legacy content. It contains all of chardetng's candidates: UTF-8,
-/// GBK, Big5, Shift_JIS, EUC-JP, ISO-2022-JP, EUC-KR and the single-byte
-/// encodings. chardetng's final guess is not ported yet.
+/// unlabeled legacy content: its candidates for UTF-8, GBK, Big5, Shift_JIS,
+/// EUC-JP, ISO-2022-JP, EUC-KR and the single-byte encodings, the scores they
+/// give, and the guess that chooses between them.
 struct Detector {
   candidates : Array[Candidate]
   mut non_ascii_seen : Int64
@@ -175,8 +200,9 @@ struct Detector {
 /// that decodes a page able to run scripts should not accept ISO-2022-JP,
 /// which can hide markup in escape sequences; email and plain files can.
 pub fn Detector::new(allow_iso_2022_jp~ : Bool = true) -> Detector {
-  // chardetng's candidate order. When two candidates report the same
-  // encoding, `score` uses the first.
+  // chardetng's candidate order; the CANDIDATE_* constants in tld.mbt name
+  // the positions. When two candidates report the same encoding, `score`
+  // uses the first.
   let iso_2022_jp = Candidate::new(
     Iso2022Jp(Iso2022JpCandidate::new()),
     Iso2022Jp,
@@ -332,10 +358,138 @@ pub fn Detector::feed(
 /// The scores are those chardetng's `find_score` computes for the same
 /// input fed in the same chunks.
 pub fn Detector::score(self : Detector, encoding : Encoding) -> Int64? {
-  for candidate in self.candidates {
+  for i, candidate in self.candidates {
     if candidate.encoding == encoding {
-      return candidate.generic_score()
+      return candidate.score_for(i, Generic, false)
     }
   }
   None
+}
+
+///|
+/// Panics unless `tld` looks like the label chardetng expects.
+fn check_tld(caller : String, tld : String) -> Unit {
+  if contains_upper_case_period_or_non_ascii(tld) {
+    abort(
+      "\{caller}: expected the last label of a host name in lower case, in Punycode if internationalized (such as \"jp\" or \"xn--p1ai\"), got \"\{tld}\"",
+    )
+  }
+}
+
+///|
+/// The encoding the stream fed so far is most likely in, as chardetng's
+/// `guess` decides it:
+///
+/// - Input that is ASCII apart from ISO-2022-JP escape sequences is
+///   ISO-2022-JP, unless the detector was created without it.
+/// - Valid UTF-8 is UTF-8 if `allow_utf8` is `true`, else the default
+///   encoding of `tld`. chardetng's documentation asks browsers to deny
+///   UTF-8 for HTML not loaded from a file, unless the user asked for
+///   detection, so that pages do not come to depend on it.
+/// - Otherwise the candidate with the highest score wins, the default of
+///   `tld` if none scores above zero.
+///
+/// `tld` is the last label of the host name the input came from, in lower
+/// case and in Punycode if internationalized, such as `"jp"`. It favors the
+/// encodings expected for that domain. Without it, the guess is the one for
+/// a generic domain such as `"com"`. Use `tld_may_affect_guess` to know
+/// whether a label has any effect.
+///
+/// The guess never is UTF-16, which only a byte order mark identifies; check
+/// `sniff_bom` first. It does not end the stream: feeding more input and
+/// guessing again is fine.
+///
+/// Panics if `tld` contains an upper-case letter, a period or a character
+/// outside ASCII, which are signs of a label not extracted correctly.
+pub fn Detector::guess(
+  self : Detector,
+  tld? : String,
+  allow_utf8~ : Bool = true,
+) -> Encoding {
+  let mut tld_type = match tld {
+    Some(label) => {
+      check_tld("Detector::guess", label)
+      classify_tld(label)
+    }
+    None => Generic
+  }
+  let candidates = self.candidates
+  if self.non_ascii_seen == 0 &&
+    self.esc_seen &&
+    candidates[CANDIDATE_ISO_2022_JP].score is Some(_) {
+    return Iso2022Jp
+  }
+  if candidates[CANDIDATE_UTF_8].score is Some(_) {
+    if allow_utf8 {
+      return Utf8
+    }
+    return candidates[encoding_for_tld(tld_type)].encoding
+  }
+  let mut encoding = candidates[encoding_for_tld(tld_type)].encoding
+  let mut max = 0L
+  let mut expectation_is_valid = false
+  if tld_type != Generic {
+    for i in FIRST_NORMAL..<candidates.length() {
+      if encoding_is_native_to_tld(tld_type, i) &&
+        candidates[i].score is Some(_) {
+        expectation_is_valid = true
+        break
+      }
+    }
+  }
+  if !expectation_is_valid {
+    // Flip Chinese and Central around
+    match tld_type {
+      Simplified =>
+        if candidates[CANDIDATE_BIG5].score is Some(_) {
+          tld_type = Traditional
+          expectation_is_valid = true
+        }
+      Traditional =>
+        if candidates[CANDIDATE_GBK].score is Some(_) {
+          tld_type = Simplified
+          expectation_is_valid = true
+        }
+      CentralWindows =>
+        if candidates[CANDIDATE_CENTRAL_ISO].score is Some(_) {
+          tld_type = CentralIso
+          expectation_is_valid = true
+        }
+      CentralIso =>
+        if candidates[CANDIDATE_CENTRAL_WINDOWS].score is Some(_) {
+          tld_type = CentralWindows
+          expectation_is_valid = true
+        }
+      _ => ()
+    }
+  }
+  for i in FIRST_NORMAL..<candidates.length() {
+    if candidates[i].score_for(i, tld_type, expectation_is_valid) is Some(score) &&
+      score > max {
+      max = score
+      encoding = candidates[i].encoding
+    }
+  }
+  // Visual Hebrew wins over logical Hebrew when its punctuation is more
+  // plausible.
+  let visual = candidates[CANDIDATE_VISUAL]
+  if visual.score_for(CANDIDATE_VISUAL, tld_type, expectation_is_valid)
+    is Some(visual_score) &&
+    (visual_score > max || encoding == Windows1255) &&
+    visual.plausible_punctuation() >
+    candidates[CANDIDATE_LOGICAL].plausible_punctuation() {
+    encoding = Iso8859_8
+  }
+  encoding
+}
+
+///|
+/// Whether `tld` can change what `Detector::guess` returns, that is, whether
+/// chardetng treats it as other than generic. An application can use it to
+/// skip offering a guess without the domain when that would not differ.
+///
+/// Panics under the same conditions as `Detector::guess`.
+pub fn tld_may_affect_guess(tld : String) -> Bool {
+  check_tld("tld_may_affect_guess", tld)
+  classify_tld(tld) != Generic
 }

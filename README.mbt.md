@@ -6,8 +6,8 @@ they can be decoded correctly instead of turning into mojibake.
 
 ## Status
 
-Early development. The detector scores every encoding chardetng detects but
-does not make a final guess yet.
+Early development. The detector, ported from chardetng 1.0.0, scores the
+encodings chardetng detects and guesses between them as chardetng does.
 
 Implemented:
 
@@ -25,17 +25,27 @@ Implemented:
 - `Detector`: chardetng's detector, ported from
   [chardetng](https://github.com/hsivonen/chardetng) 1.0.0, the detector
   Firefox uses for unlabeled legacy content. Feed it the input in chunks with
-  `feed`; `score(encoding)` then tells how plausible the input is in that
-  encoding, or that it is ruled out. It scores UTF-8, GBK (which covers
+  `feed`; `guess()` then returns the most likely encoding, and
+  `score(encoding)` tells how plausible the input is in an encoding, or that
+  it is ruled out. It considers UTF-8, GBK (which covers
   GB18030's four-byte sequences), Big5 (with HKSCS), Shift_JIS, EUC-JP,
   ISO-2022-JP, EUC-KR (with the code page 949 extensions) and 19 single-byte
   encodings: windows-874, windows-1250 to windows-1258, ISO-8859-2, -4, -5,
   -6, -7, -8 and -13, KOI8-U and IBM866.
+  The guess is chardetng's: input that is ASCII apart from ISO-2022-JP
+  escape sequences is ISO-2022-JP, valid UTF-8 is UTF-8 unless
+  `allow_utf8=false`, and otherwise the highest score wins, with visual
+  Hebrew (ISO-8859-8) preferred over logical Hebrew when its punctuation is
+  more plausible. `guess(tld="sk")` takes the top-level domain the input
+  came from as a hint, and `tld_may_affect_guess(tld)` tells whether a
+  domain is one chardetng has expectations for.
   ISO-2022-JP can be ruled out from the start with
-  `Detector::new(allow_iso_2022_jp=false)`, as browsers must for pages that
-  run scripts. The scores are chardetng's: a golden test compares them with
-  chardetng 1.0.0 on 392 inputs, each fed whole and in chunks of 1, 2, 3 and
-  7 bytes. The CJK candidates use their own decoders, built from the Encoding
+  `Detector::new(allow_iso_2022_jp=false)`, as chardetng advises for Web
+  content. The scores and guesses are chardetng's: a golden test compares
+  them with chardetng 1.0.0 on 396 inputs, each fed whole and in chunks of
+  1, 2, 3 and 7 bytes, with guesses for 33 top-level domain labels and for
+  none, each with UTF-8 allowed and denied. The CJK candidates use their own
+  decoders, built from the Encoding
   Standard's index tables; a second test compares them with the decoders of
   encoding_rs 0.8.42, which chardetng uses, on every one- and two-byte input,
   every four-byte GB18030 sequence in the BMP, every EUC-JP sequence for JIS
@@ -47,13 +57,6 @@ Implemented:
 
 Planned, not implemented yet:
 
-- chardetng's final guess, which compares all candidates, decides for
-  ISO-2022-JP when only escape sequences mark the input as not ASCII, and
-  can take a top-level domain as a hint. Until then, picking the highest
-  score by hand, as in the examples below, only approximates it:
-  ISO-2022-JP, for one, scores 0 like every other encoding the input does
-  not rule out. Valid UTF-8 is not proof that UTF-8 was meant; that decision
-  belongs to the guess.
 - The encoding sniffing steps of the
   [HTML Standard](https://html.spec.whatwg.org/multipage/parsing.html#determining-the-character-encoding):
   byte order mark, transport-layer label, `<meta>` prescan.
@@ -116,9 +119,9 @@ test {
 }
 ```
 
-The detector scores each encoding; higher is more plausible. Here a Russian
-sentence in windows-1251 is not valid UTF-8, and windows-1251 scores highest
-of the encodings scored:
+The detector scores each encoding, higher being more plausible, and guesses
+from the scores. Here a Russian sentence in windows-1251 is not valid UTF-8,
+and the guess is windows-1251:
 
 ```mbt check
 ///|
@@ -129,16 +132,43 @@ test {
   let detector = @mbchardet.Detector::new()
   detector.feed(data[:], last=true) |> ignore
   assert_eq(detector.score(@mbchardet.Utf8), None)
-  let mut best = None
-  for encoding in @mbchardet.Encoding::all() {
-    match (detector.score(encoding), best) {
-      (Some(score), None) => best = Some((encoding, score))
-      (Some(score), Some((_, best_score))) if score > best_score =>
-        best = Some((encoding, score))
-      _ => ()
-    }
-  }
-  assert_eq(best.map(b => b.0), Some(@mbchardet.Windows1251))
+  assert_eq(detector.guess(), @mbchardet.Windows1251)
+}
+```
+
+A short input leaves room for doubt, and the top-level domain of the site it
+came from can settle it. chardetng guesses this Slovak sentence in
+windows-1250 wrongly without a domain, and correctly with `sk`:
+
+```mbt check
+///|
+test {
+  // "Keď som ju uvidel, zamrelo mi srdce.", Tatoeba sentence 9935594
+  // (CC BY 2.0 FR), in windows-1250.
+  let data = b"Ke\xEF som ju uvidel, zamrelo mi srdce."
+  let detector = @mbchardet.Detector::new()
+  detector.feed(data[:], last=true) |> ignore
+  assert_eq(detector.guess(), @mbchardet.Iso8859_4)
+  assert_eq(detector.guess(tld="sk"), @mbchardet.Windows1250)
+  assert_true(@mbchardet.tld_may_affect_guess("sk"))
+  assert_false(@mbchardet.tld_may_affect_guess("com"))
+}
+```
+
+Valid UTF-8 is guessed as UTF-8 unless `allow_utf8=false`. chardetng's
+documentation asks browsers to pass that for HTML not loaded from a file,
+unless the user asked for detection, so that pages do not come to depend on
+UTF-8 detection. The guess is then the legacy encoding the domain expects:
+
+```mbt check
+///|
+test {
+  let data = b"Gr\xC3\xBC\xC3\x9Fe" // "Grüße" in UTF-8
+  let detector = @mbchardet.Detector::new()
+  detector.feed(data[:], last=true) |> ignore
+  assert_eq(detector.guess(), @mbchardet.Utf8)
+  assert_eq(detector.guess(allow_utf8=false), @mbchardet.Windows1252)
+  assert_eq(detector.guess(tld="jp", allow_utf8=false), @mbchardet.ShiftJis)
 }
 ```
 
@@ -196,11 +226,11 @@ and CI checks that regenerating them gives the committed files:
 - `tools/gen_corpus.py` picks sentences from Tatoeba into `tools/corpus.tsv`.
 - `tools/golden` (Rust, with chardetng 1.0.0 and encoding_rs 0.8.42 pinned
   in `Cargo.lock`) encodes each sentence in every encoding that can
-  represent it, adds edge cases, and writes chardetng's scores to
-  `golden_data_test.mbt`. It also writes `golden_trace_wbtest.mbt`, hashes of
+  represent it, adds edge cases, and writes chardetng's scores and guesses
+  to `golden_data_test.mbt`. It also writes `golden_trace_wbtest.mbt`, hashes of
   how the CJK decoders of encoding_rs answer byte by byte.
-- `tools/gen_data.py` writes chardetng's tables from its `src/data.rs` to
-  `detector_data.mbt`.
+- `tools/gen_data.py` writes chardetng's tables from its `src/data.rs` and
+  `src/tld.rs` to `detector_data.mbt`.
 - `tools/gen_index.py` writes the GB18030, Big5, JIS X 0208, JIS X 0212 and
   EUC-KR tables from the index files of the Encoding Standard to
   `cjk_index_data.mbt`; its documentation gives the pinned download.
@@ -208,7 +238,7 @@ and CI checks that regenerating them gives the committed files:
 ```
 python tools/gen_corpus.py CACHE_DIR tools/corpus.tsv
 cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt
-python tools/gen_data.py CHARDETNG_SOURCE/src/data.rs detector_data.mbt
+python tools/gen_data.py CHARDETNG_SOURCE/src detector_data.mbt
 python tools/gen_index.py WHATWG_INDEX_DIR cjk_index_data.mbt
 moon fmt
 ```

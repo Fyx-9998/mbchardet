@@ -28,8 +28,7 @@ What is taken from chardetng 1.0.0:
     NonLatinCasedCandidate, ArabicFrenchCandidate, CaselessCandidate,
     LogicalCandidate, VisualCandidate) and their constants, ported from
     src/lib.rs, and SingleByteData with its classification and pair scoring,
-    ported from src/data.rs. The punctuation counts of the Hebrew candidates
-    are left out until the final guess that reads them is ported.
+    ported from src/data.rs.
   - chinese.mbt: the GBK and Big5 candidates (GbkCandidate, Big5Candidate)
     and their constants, ported from src/lib.rs. chardetng starts a new GBK
     decoder after two kinds of malformed bytes; the port leaves that out
@@ -41,16 +40,20 @@ What is taken from chardetng 1.0.0:
     ported from src/lib.rs.
   - detector.mbt: how EncodingDetector feeds candidates (skipping leading
     ASCII, keeping two bytes of context, treating the end of the stream as a
-    space) and how find_score reports a score without a top-level domain,
-    ported from src/lib.rs. The guess is not ported yet.
+    space), how Candidate::score adjusts a score for a top-level domain,
+    find_score, guess and tld_may_affect_guess, ported from src/lib.rs.
+  - tld.mbt: the classes of top-level domains, classify_tld and
+    contains_upper_case_period_or_non_ascii, ported from src/tld.rs, and
+    encoding_for_tld, encoding_is_native_to_tld and score_adjustment, ported
+    from src/lib.rs.
   - detector_data.mbt: the byte classification and character-pair score
-    tables and the frequent simplified Hanzi, Kanji and Hangul, written by
-    tools/gen_data.py
-    from src/data.rs without changes. src/data.rs states: "Any copyright is
-    dedicated to the Public Domain.
+    tables and the frequent simplified Hanzi, Kanji and Hangul from
+    src/data.rs, and the top-level domain tables from src/tld.rs, written by
+    tools/gen_data.py without changes. src/data.rs and src/tld.rs both
+    state: "Any copyright is dedicated to the Public Domain.
     https://creativecommons.org/publicdomain/zero/1.0/"
-  - The expected scores in golden_data_test.mbt, produced by running
-    chardetng 1.0.0 (tools/golden).
+  - The expected scores and guesses in golden_data_test.mbt, produced by
+    running chardetng 1.0.0 (tools/golden).
 
 encoding_rs 0.8.42
   https://github.com/hsivonen/encoding_rs

@@ -92,7 +92,7 @@ jobs:
         run: |
           manifest=$(cargo metadata --locked --format-version 1 --manifest-path tools/golden/Cargo.toml \
             | python3 -c 'import json, sys; print(next(p["manifest_path"] for p in json.load(sys.stdin)["packages"] if p["name"] == "chardetng"))')
-          python3 tools/gen_data.py "$(dirname "$manifest")/src/data.rs" detector_data.mbt
+          python3 tools/gen_data.py "$(dirname "$manifest")/src" detector_data.mbt
 
       - name: Regenerate the CJK tables from the WHATWG index files
         run: |

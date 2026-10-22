@@ -140,3 +140,57 @@ test "panic on feeding after the last chunk" {
   detector.feed(b"done"[:], last=true) |> ignore
   detector.feed(b"more"[:]) |> ignore
 }
+
+///|
+test "the guess for ASCII depends on whether UTF-8 is allowed" {
+  let detector = @mbchardet.Detector::new()
+  detector.feed(b"Plain ASCII."[:], last=true) |> ignore
+  assert_eq(detector.guess(), @mbchardet.Utf8)
+  assert_eq(detector.guess(tld="ru"), @mbchardet.Utf8)
+  // Without UTF-8, the default encoding of the domain.
+  assert_eq(detector.guess(allow_utf8=false), @mbchardet.Windows1252)
+  assert_eq(detector.guess(tld="ru", allow_utf8=false), @mbchardet.Windows1251)
+  assert_eq(detector.guess(tld="com", allow_utf8=false), @mbchardet.Windows1252)
+}
+
+///|
+test "ISO-2022-JP is guessed from escape sequences in ASCII" {
+  // こんにちは in ISO-2022-JP
+  let data = b"\x1B$B$3$s$K$A$O\x1B(B"
+  let allowed = @mbchardet.Detector::new()
+  allowed.feed(data[:], last=true) |> ignore
+  assert_eq(allowed.guess(), @mbchardet.Iso2022Jp)
+  assert_eq(allowed.guess(allow_utf8=false), @mbchardet.Iso2022Jp)
+  let denied = @mbchardet.Detector::new(allow_iso_2022_jp=false)
+  denied.feed(data[:], last=true) |> ignore
+  assert_eq(denied.guess(), @mbchardet.Utf8)
+}
+
+///|
+test "guessing does not end the stream" {
+  let detector = @mbchardet.Detector::new()
+  detector.feed(b"caf\xC3\xA9 "[:]) |> ignore
+  assert_eq(detector.guess(), @mbchardet.Utf8)
+  detector.feed(b"cr\xE8me"[:], last=true) |> ignore
+  assert_eq(detector.guess(), @mbchardet.Windows1252)
+}
+
+///|
+test "panic on a TLD in upper case" {
+  @mbchardet.Detector::new().guess(tld="JP") |> ignore
+}
+
+///|
+test "panic on a TLD with a period" {
+  @mbchardet.Detector::new().guess(tld="co.jp") |> ignore
+}
+
+///|
+test "panic on a TLD outside ASCII" {
+  @mbchardet.Detector::new().guess(tld="рф") |> ignore
+}
+
+///|
+test "panic on tld_may_affect_guess with a TLD in upper case" {
+  @mbchardet.tld_may_affect_guess("Com") |> ignore
+}

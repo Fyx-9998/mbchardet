@@ -750,22 +750,34 @@ fn CaselessCandidate::feed(
 }
 
 ///|
+/// Whether `byte` is one of the punctuation marks chardetng counts to tell
+/// logical from visual Hebrew.
+fn is_ascii_punctuation(byte : Byte) -> Bool {
+  byte is (b'.' | b',' | b':' | b';' | b'?' | b'!')
+}
+
+///|
 /// Hebrew in logical order (windows-1255).
-///
-/// chardetng also counts punctuation here and in `VisualCandidate`, but only
-/// its final guess reads the counts, so they are left out until the guess is
-/// ported.
 priv struct LogicalCandidate {
   data : SingleByteData
   mut prev : Int32
   mut prev_ascii : Bool
+  // Punctuation right after a Hebrew letter, as logical order puts it.
+  mut plausible_punctuation : Int64
   mut current_word_len : Int64
   mut longest_word : Int64
 }
 
 ///|
 fn LogicalCandidate::new(data : SingleByteData) -> LogicalCandidate {
-  { data, prev: 0, prev_ascii: true, current_word_len: 0, longest_word: 0, }
+  {
+    data,
+    prev: 0,
+    prev_ascii: true,
+    plausible_punctuation: 0,
+    current_word_len: 0,
+    longest_word: 0,
+  }
 }
 
 ///|
@@ -800,6 +812,11 @@ fn LogicalCandidate::feed(
         self.prev,
         false,
       )
+      if caseless_class == 0 &&
+        prev_non_ascii_alphabetic &&
+        is_ascii_punctuation(byte) {
+        self.plausible_punctuation += 1
+      }
       if self.prev == LATIN_LETTER && non_ascii_alphabetic {
         score += LATIN_ADJACENCY_PENALTY
       } else if caseless_class == LATIN_LETTER && prev_non_ascii_alphabetic {
@@ -818,13 +835,24 @@ priv struct VisualCandidate {
   data : SingleByteData
   mut prev : Int32
   mut prev_ascii : Bool
+  mut prev_punctuation : Bool
+  // Hebrew letters right after punctuation, as visual order puts them.
+  mut plausible_punctuation : Int64
   mut current_word_len : Int64
   mut longest_word : Int64
 }
 
 ///|
 fn VisualCandidate::new(data : SingleByteData) -> VisualCandidate {
-  { data, prev: 0, prev_ascii: true, current_word_len: 0, longest_word: 0, }
+  {
+    data,
+    prev: 0,
+    prev_ascii: true,
+    prev_punctuation: false,
+    plausible_punctuation: 0,
+    current_word_len: 0,
+    longest_word: 0,
+  }
 }
 
 ///|
@@ -852,6 +880,9 @@ fn VisualCandidate::feed(self : VisualCandidate, buffer : BytesView) -> Int64? {
     }
     if !ascii_pair {
       score += self.data.score(caseless_class, self.prev, false)
+      if non_ascii_alphabetic && self.prev_punctuation {
+        self.plausible_punctuation += 1
+      }
       if self.prev == LATIN_LETTER && non_ascii_alphabetic {
         score += LATIN_ADJACENCY_PENALTY
       } else if caseless_class == LATIN_LETTER &&
@@ -861,6 +892,7 @@ fn VisualCandidate::feed(self : VisualCandidate, buffer : BytesView) -> Int64? {
     }
     self.prev_ascii = ascii
     self.prev = caseless_class
+    self.prev_punctuation = caseless_class == 0 && is_ascii_punctuation(byte)
   }
   Some(score)
 }

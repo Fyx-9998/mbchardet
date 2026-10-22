@@ -2161,6 +2161,13 @@ let golden_cases : Array[
     [],
   ),
   (
+    "Big5 Mac byte before a digit, then Big5",
+    b"\xFE1 \xA7\xDA\xAD\xCC\xA4\xB5\xA4\xD1\xA6b\xBE\xC7\xAE\xD5\xBE\xC7\xB2\xDF\xA4\xA4\xA4\xE5\xA1A\xA6\xD1\xAEv\xBB\xA1\xA7\xDA\xAD\xCC\xAA\xBA\xB6i\xA8B\xAB\xDC\xA4j\xA1C\xA9\xFA\xA4\xD1\xA7\xDA\xAD\xCC\xC1\xD9\xADn\xC4~\xC4\xF2\xA7V\xA4O\xBE\xC7\xB2\xDF\xA1A\xA4j\xAEa\xB3\xA3\xAB\xDC\xB0\xAA\xBF\xB3\xA1C",
+    "- - 39 -2706 - - - - -18702 -7703 -17524 - -17512 - -10610 - -19245 -18461 -18414 -2555 - - - -17399 -7855 -12746",
+    "- - 39 -2706 - - - - -18702 -7703 -17524 - -17512 - -10610 - -19245 -18461 -18414 -2555 - - - -17399 -7855 -12746",
+    [],
+  ),
+  (
     "Shift_JIS pair 82 F9",
     b"x\x82\xF9 ",
     "- -36 -1271 -820 - - -41 - 33 - 279 - 0 - - 0 0 - - - - - - - - -",
@@ -2761,5 +2768,1262 @@ let golden_cases : Array[
     "- -3690 369 - -18450 - 45 - -5569 - -2676 - -2350 - - -2355 -2490 -5178 -3210 -335 - - - -2355 - -2567",
     "- -3690 369 - -18450 - 45 - -5369 - -2476 - -2150 - - -2290 -2290 -4978 -3010 -240 - - - -2290 - -2592",
     [],
+  ),
+  (
+    "Hebrew without punctuation in windows-1255",
+    b"\xF9\xEC\xE5\xED \xF2\xE5\xEC\xED \xE5\xEE\xEC\xE5\xE0\xE5",
+    "- -290 125 -2400 140 - 70 -1540 -2193 396 -1264 -11 -475 626 -59 -1794 -1569 -2193 -1795 -87 - -11 626 -1794 105 180",
+    "- -290 125 -2400 140 - 70 -1540 -1993 343 -1318 -35 -275 580 -144 -1594 -1369 -1993 -1595 -101 - -35 580 -1594 92 166",
+    [],
+  ),
+  (
+    "Hebrew comma without a space in windows-1255",
+    b"\xF9\xEC\xE5\xED,\xF2\xE5\xEC\xED.",
+    "- -350 65 -1620 80 - 40 -1100 -668 298 -589 -87 -50 424 40 -1149 -704 -668 -930 -158 - -87 424 -1149 38 109",
+    "- -350 65 -1620 80 - 40 -1100 -668 298 -589 -87 -50 424 40 -1149 -704 -668 -930 -158 - -87 424 -1149 38 109",
+    [],
+  ),
+  (
+    "visual Hebrew after a double low line in ISO-8859-8",
+    b"\xDF ?\xEA\xEE\xE5\xEC\xF9 \xE4\xEE .\xED\xEC\xE5\xF2 ,\xED\xE5\xEC\xF9",
+    "- - - - - - - -2195 -1925 400 -254 242 -271 - -126 -2009 -2216 -1925 -745 -280 - 242 432 -2009 235 38",
+    "- - - - - - - -2195 -1938 399 -488 240 -251 - -126 -1989 -2196 -1938 -930 -280 - 240 413 -1989 248 38",
+    [],
+  ),
+]
+
+///|
+/// The labels the guesses are for, with chardetng's tld_may_affect_guess.
+let golden_tlds : Array[(String?, Bool)] = [
+  (None, false),
+  (Some("com"), false),
+  (Some("in"), false),
+  (Some("museum"), false),
+  (Some("xn--abc"), false),
+  (Some("xn--fiqs8s"), false),
+  (Some("zz"), true),
+  (Some("de"), true),
+  (Some("edu"), true),
+  (Some("xn--54b7fta0cc"), true),
+  (Some("cz"), true),
+  (Some("ru"), true),
+  (Some("xn--p1ai"), true),
+  (Some("gr"), true),
+  (Some("tr"), true),
+  (Some("il"), true),
+  (Some("eg"), true),
+  (Some("lt"), true),
+  (Some("vn"), true),
+  (Some("th"), true),
+  (Some("cn"), true),
+  (Some("tw"), true),
+  (Some("jp"), true),
+  (Some("kr"), true),
+  (Some("xn--3e0b707e"), true),
+  (Some("sg"), true),
+  (Some("hk"), true),
+  (Some("hu"), true),
+  (Some("is"), true),
+  (Some("ge"), true),
+  (Some("ba"), true),
+  (Some("my"), true),
+  (Some("eu"), true),
+  (Some("xn--mgbaam7a8h"), true),
+]
+
+///|
+/// (label, guesses) for each of golden_cases, the guesses as letters,
+/// "a" for the first of golden_encodings: fed whole with the end marked,
+/// for each of golden_tlds with UTF-8 allowed and then denied; then, with
+/// no TLD and UTF-8 allowed, from a detector with ISO-2022-JP denied, fed
+/// whole without the end marked, and fed in chunks of 1, 2, 3 and 7 bytes.
+let golden_guesses : Array[(String, String)] = [
+  (
+    "en 7183174 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "en 11629178,5851931,3915358,13107988,879765 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "fr 9837511 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "fr 9837511 in windows-1250", "kkkkkkkkkkkkkkkkkkkkiikkkkkkmmkkkksskkkkbbccddkkkkccccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "fr 2053714,13919741,4381657,410438,13877682 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "fr 2053714,13919741,4381657,410438,13877682 in GBK", "cccccccccccckkkkkkkkiizzzzvvmmnnooppqqhhbbcceeggggccccrrkkzzzzkkzzoocccccc",
+  ),
+  (
+    "fr 2053714,13919741,4381657,410438,13877682 in windows-1252", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "de 5547531 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "de 5547531 in GBK", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbcceeggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "de 5547531 in windows-1250", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbccddkkkkbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "de 13326648,808229,12983726 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "de 13326648,808229,12983726 in windows-1250", "kkkkkkkkkkkkkkkkkkkkiikkkkkkmmkkkkkkkkkkbbccddkkkkbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "es 2857691 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "es 6701272,6477327,2118794,2073510 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "es 6701272,6477327,2118794,2073510 in GBK", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbcceeggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "es 6701272,6477327,2118794,2073510 in windows-1250", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "pt 4834666 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "pt 4834666 in windows-1252", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbccddkkkkbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "pt 12822936,4832251,4979999,1361923,7882950 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "pt 12822936,4832251,4979999,1361923,7882950 in GBK", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbcceeggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "pt 12822936,4832251,4979999,1361923,7882950 in windows-1252", "mmmmmmmmmmmmkkkkkkkkiijjjjvvmmnnoossqqhhmmmmmmmmmmmmmmrrkkkkiikkiioommmmmm",
+  ),
+  (
+    "it 11544522 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "it 11544522 in GBK", "zzzzzzzzzzzzzzzzzzzzzzzzzzvvzznnoozzzzhhbbcceeggggcccczzzzzzzzzzzzoozzzzzz",
+  ),
+  (
+    "it 11544522 in windows-1252", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "it 3282394,6458978,5505815 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "nl 8521981 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "nl 775230,718653,3270169,11321302 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "sv 10925505 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "sv 10925505 in windows-1250", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbccddkkkkbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "sv 922566,2147881,9984952,3720754,4163711 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "sv 922566,2147881,9984952,3720754,4163711 in windows-1252", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "da 4136411 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "da 1831451,1940443,4204088,2571021,4748926 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "da 1831451,1940443,4204088,2571021,4748926 in windows-1252", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "da 1831451,1940443,4204088,2571021,4748926 in windows-1257", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "nb 10943624 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "nb 10944077,6331487,9451088,3547421 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "nb 10944077,6331487,9451088,3547421 in windows-1252", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "ca 8975871 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ca 8975871 in GBK", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbcceeggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "ca 8975871 in windows-1252", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "ca 9722749,1527524,877599,13977299 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ca 9722749,1527524,877599,13977299 in GBK", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbcceeggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "ca 9722749,1527524,877599,13977299 in windows-1252", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "fi 2736881 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "fi 2736881 in windows-1250", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "fi 3390933,11363519,7759835,3392702,6405027 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "fi 3390933,11363519,7759835,3392702,6405027 in windows-1250", "kkkkkkkkkkkkkkkkkkkknnkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkknnkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "is 382256 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "is 382256 in windows-1252", "iiiiiiiiiiiikkkkkkkkiikkkkkkkkkkkkkkkkkkiiiiiiiiiiiiiirrkkkkiikkiikkiiiiii",
+  ),
+  (
+    "is 514494,3998449,544562,10641105 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "is 514494,3998449,544562,10641105 in windows-1252", "kkkkkkkkkkkkkkkkkkkkiikkkkkkmmkkkkppqqkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "pl 6406124 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "pl 6406124 in windows-1250", "iiiiiiiiiiiikkkkkkkkiijjjjiimmiiooiiqqiiiiiiddiiiiiiiiiikkkkiikkiiooiiiiii",
+  ),
+  (
+    "pl 6406124 in windows-1257", "mmmmmmmmmmmmkkkkkkkkiijjjjvvmmnnooppqqmmbbccddmmmmbbccrrkkkkiikkiioommmmmm",
+  ),
+  (
+    "pl 6406124 in ISO-8859-2", "rrrrrrrrrrrrkkkkkkkkrrjjjjvvmmnnooppqqhhrrrrddrrrrrrrrrrkkkkrrkkrroorrrrrr",
+  ),
+  (
+    "pl 2849692,988644,5489641 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "pl 2849692,988644,5489641 in windows-1250", "iiiiiiiiiiiikkkkkkkkiijjjjiimmiiooiiqqiiiiiiiiiiiiiiiiiikkkkiikkiiooiiiiii",
+  ),
+  (
+    "pl 2849692,988644,5489641 in windows-1257", "iiiiiiiiiiiikkkkkkkkiikkkkkkkkiikksskkiiiiiiiiiiiiiiiirrkkkkiikkiikkiiiiii",
+  ),
+  (
+    "pl 2849692,988644,5489641 in ISO-8859-2", "rrrrrrrrrrrrkkkkkkkkrrjjjjvvmmnnooppqqhhrrrrrrrrrrrrrrrrkkkkrrkkrroorrrrrr",
+  ),
+  (
+    "cs 2243948 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "cs 2243948 in windows-1250", "iiiiiiiiiiiikkkkkkkkiijjjjiiiiiiooiiiiiibbccddiiiibbcciikkkkiikkiiooiiiiii",
+  ),
+  (
+    "cs 2243948 in ISO-8859-2", "rrrrrrrrrrrrkkkkkkkkrrjjjjvvmmnnoossqqhhbbccddrrrrbbccrrkkkkrrkkrroorrrrrr",
+  ),
+  (
+    "cs 11005843,4283907,13193219,3465025,13470396,1133240 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "cs 11005843,4283907,13193219,3465025,13470396,1133240 in windows-1250", "iiiiiiiiiiiikkkkkkkkiikkkkiiiiiikkiiiiiiiiiiiiiiiiiiiiiikkkkiikkiikkiiiiii",
+  ),
+  (
+    "cs 11005843,4283907,13193219,3465025,13470396,1133240 in ISO-8859-2", "rrrrrrrrrrrrkkkkkkkkrrjjjjvvmmnnoossqqrrrrrrrrrrrrrrrrrrkkkkrrkkrroorrrrrr",
+  ),
+  (
+    "sk 9935594 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "sk 9935594 in windows-1250", "sssssssssssskkkkkkkkiijjjjvvmmnnoossqqhhssssssssssssssrrkkkkiikkssoossssss",
+  ),
+  (
+    "sk 10045698,12671246,10644542,13032617,12755257,8994690 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "sk 10045698,12671246,10644542,13032617,12755257,8994690 in windows-1250", "iiiiiiiiiiiiiiiiiiiiiijjjjiiiiiiooiiiiiiiiiiiiiiiiiiiiiiiikkiikkiiooiiiiii",
+  ),
+  (
+    "sk 10045698,12671246,10644542,13032617,12755257,8994690 in ISO-8859-2", "rrrrrrrrrrrrkkkkkkkkrrjjjjvvmmnnoossqqrrrrrrrrrrrrrrrrrrkkkkrrkkrroorrrrrr",
+  ),
+  (
+    "hu 5667144 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "hu 5667144 in windows-1250", "iiiiiiiiiiiikkkkkkkkiikkkkkkkkiikkkkkkiibbccddiiiibbccrrkkkkiikkiikkiiiiii",
+  ),
+  (
+    "hu 7883675,4409505,9991935,10220049 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "hu 7883675,4409505,9991935,10220049 in windows-1250", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbccddkkkkbbccrrkkkkiikkkkkkkkkkkk",
+  ),
+  (
+    "hr 1053989 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "hr 1051119,670219,955791,1128248,13822478,1054018 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "hr 1051119,670219,955791,1128248,13822478,1054018 in windows-1250", "iiiiiiiiiiiikkkkkkkkiijjjjiiiiiiooiiiiiiiiiiiiiiiiiiiiiikkkkiikkiiooiiiiii",
+  ),
+  (
+    "hr 1051119,670219,955791,1128248,13822478,1054018 in windows-1257", "kkkkkkkkkkkkkkkkkkkkiikkkkkkmmkkkkppqqkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "hr 1051119,670219,955791,1128248,13822478,1054018 in ISO-8859-2", "rrrrrrrrrrrrkkkkkkkkrrjjjjvvmmnnoossqqhhrrrrddrrrrrrrrrrkkkkrrkkrroorrrrrr",
+  ),
+  (
+    "sl 11771533 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "sl 11771533 in windows-1250", "iiiiiiiiiiiikkkkkkkkiijjjjiimmiiooiiiiiibbccddggggbbcciikkkkiikkiiooiiiiii",
+  ),
+  (
+    "sl 11771533 in windows-1257", "kkkkkkkkkkkkkkkkkkkkiikkkkkkmmkkkkppqqkkbbccddkkkkbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "sl 11771533 in ISO-8859-2", "rrrrrrrrrrrrkkkkkkkkrrjjjjvvmmnnoossqqhhbbccddggggbbccrrkkkkrrkkrroorrrrrr",
+  ),
+  (
+    "sl 2115745,11771986,6598548,11905738,11889049 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "sl 2115745,11771986,6598548,11905738,11889049 in windows-1250", "iiiiiiiiiiiikkkkkkkkiijjjjiiiiiiooiiiiiibbccddiiiibbcciikkkkiikkiiooiiiiii",
+  ),
+  (
+    "sl 2115745,11771986,6598548,11905738,11889049 in windows-1257", "iiiiiiiiiiiikkkkkkkkiikkkkkkmmkkkkppqqiibbccddiiiibbccrrkkkkiikkiikkiiiiii",
+  ),
+  (
+    "sl 2115745,11771986,6598548,11905738,11889049 in ISO-8859-2", "rrrrrrrrrrrrkkkkkkkkrrjjjjvvmmnnoossqqhhbbccddrrrrbbccrrkkkkrrkkrroorrrrrr",
+  ),
+  (
+    "ro 13619292 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ro 13619292 in windows-1250", "iiiiiiiiiiiikkkkkkkkiijjjjvvmmnnoossqqhhbbccddggggbbccrrkkkkiikkiiooiiiiii",
+  ),
+  (
+    "ro 13619292 in windows-1254", "mmmmmmmmmmmmkkkkkkkkiijjjjvvmmnnoossqqmmbbccddmmmmbbccrrkkkkiikkiioommmmmm",
+  ),
+  (
+    "ro 13619678,8605276,6581973,12349301,6803852 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ro 13619678,8605276,6581973,12349301,6803852 in windows-1250", "iiiiiiiiiiiikkkkkkkkiijjjjvvmmnnooppqqiiiiiiiiiiiiiiiirrkkkkiikkiiooiiiiii",
+  ),
+  (
+    "ru 4792710 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ru 4792710 in GBK", "ccccccccccccccccccccccjjjjvvccccooccccccbbcceecccccccccccccciicckkoocccccc",
+  ),
+  (
+    "ru 4792710 in Big5", "kkkkkkkkkkkkkkkkkkkkbbkkkkkkkkkkkkkkkkkkbbccddkkkkbbccbbkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "ru 4792710 in Shift_JIS", "bbbbbbbbbbbbbbbbbbbbbbddddbbbbbbddbbbbbbbbbbddggggbbbbbbbbbbddbbddddbbbbbb",
+  ),
+  (
+    "ru 4792710 in ISO-2022-JP", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffafffff",
+  ),
+  (
+    "ru 4792710 in EUC-KR", "ccccccccccccccccccccccggggggccccooccccccbbccddggggccccccccccggccggoocccccc",
+  ),
+  (
+    "ru 4792710 in windows-1251", "jjjjjjjjjjjjjjjjjjjjjjjjjjvvjjjjoojjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjj",
+  ),
+  (
+    "ru 4792710 in ISO-8859-5", "ttttttttttttttttttttttttttttttttoottttttttttttttttttttttttttttttttootttttt",
+  ),
+  (
+    "ru 4792710 in KOI8-U", "yyyyyyyyyyyyyyyyyyyyyyyyyyvvyyyyooyyyyyyyyyyddyyyyyyyyyyyyyyyyyyyyooyyyyyy",
+  ),
+  (
+    "ru 4792710 in IBM866", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoozzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoozzzzzz",
+  ),
+  (
+    "ru 3384473,2791536,5360037 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ru 3384473,2791536,5360037 in GBK", "ccccccccccccccccccccccjjjjccccccooccccccbbcceecccccccccccccciicckkoocccccc",
+  ),
+  (
+    "ru 3384473,2791536,5360037 in Big5", "kkkkkkkkkkkkkkkkkkkkbbkkkkkkkkkkkkkkkkkkbbccddkkkkbbbbbbkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "ru 3384473,2791536,5360037 in Shift_JIS", "ddddddddddddddddddddddddddddddddddddddddbbbbddggggbbbbdddddddddddddddddddd",
+  ),
+  (
+    "ru 3384473,2791536,5360037 in ISO-2022-JP", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffafffff",
+  ),
+  (
+    "ru 3384473,2791536,5360037 in EUC-KR", "ccccccccccccccccccccccggggccccccooccccccbbccddggggccccccccccggccggoocccccc",
+  ),
+  (
+    "ru 3384473,2791536,5360037 in windows-1251", "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjj",
+  ),
+  (
+    "ru 3384473,2791536,5360037 in ISO-8859-5", "ttttttttttttttttttttttttttttttttoottttttttttttttttttttttttttttttttootttttt",
+  ),
+  (
+    "ru 3384473,2791536,5360037 in KOI8-U", "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyooyyyyyyyyyyddyyyyyyyyyyyyyyyyyyyyooyyyyyy",
+  ),
+  (
+    "ru 3384473,2791536,5360037 in IBM866", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoozzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoozzzzzz",
+  ),
+  (
+    "uk 6306317 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "uk 6306317 in windows-1251", "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjjbbccjjjjjjbbccjjjjjjjjjjjjoojjjjjj",
+  ),
+  (
+    "uk 6306317 in ISO-8859-5", "ttttttttttttttttttttttttttvvttttoottttttttttttttttttttttttttttttttootttttt",
+  ),
+  (
+    "uk 6306317 in KOI8-U", "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyooyyyyyyyyyyddyyyyyyyyyyyyyyyyyyyyooyyyyyy",
+  ),
+  (
+    "uk 8393430,7744081,6674355,6398560,1570869 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "uk 8393430,7744081,6674355,6398560,1570869 in windows-1251", "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjj",
+  ),
+  (
+    "uk 8393430,7744081,6674355,6398560,1570869 in ISO-8859-5", "ttttttttttttttttttttttttttttttttoottttttttttttttttttttttttttttttttootttttt",
+  ),
+  (
+    "uk 8393430,7744081,6674355,6398560,1570869 in KOI8-U", "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyooyyyyyyyyyyddyyyyyyyyyyyyyyyyyyyyooyyyyyy",
+  ),
+  (
+    "be 4249718 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "be 4249718 in windows-1251", "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjj",
+  ),
+  (
+    "be 4249718 in ISO-8859-5", "ttttttttttttttttttttttttttttttttoottttttttttttttttttttttttttttttttootttttt",
+  ),
+  (
+    "be 4249718 in KOI8-U", "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyooyyyyyyyyyyddyyyyyyyyyyyyyyyyyyyyooyyyyyy",
+  ),
+  (
+    "be 8046546,8357090,5191075,1523139 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "be 8046546,8357090,5191075,1523139 in windows-1251", "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjj",
+  ),
+  (
+    "bg 2605934 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "bg 2605934 in GBK", "ccccccccccccccccccccccggggccccccooccccccbbcceeggggccccccccccggccggoocccccc",
+  ),
+  (
+    "bg 2605934 in Big5", "kkkkkkkkkkkkkkkkkkkkbbkkkkkkkkkkkkkkkkkkbbccddkkkkbbccbbkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "bg 2605934 in Shift_JIS", "ddddddddddddddddddddddddddddddddddddddddbbbbddggggbbbbdddddddddddddddddddd",
+  ),
+  (
+    "bg 2605934 in ISO-2022-JP", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffafffff",
+  ),
+  (
+    "bg 2605934 in EUC-KR", "ccccccccccccccccccccccggggccccccooccccccbbccddggggccccccccccggccggoocccccc",
+  ),
+  (
+    "bg 2605934 in windows-1251", "jjjjjjjjjjjjjjjjjjjjjjjjjjvvjjnnoojjjjhhjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjj",
+  ),
+  (
+    "bg 2605934 in ISO-8859-5", "ttttttttttttttttttttttttttvvttttoottttttttttddttttttttttttttttttttootttttt",
+  ),
+  (
+    "bg 2605934 in KOI8-U", "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyooyyyyyyyyyyddyyyyyyyyyyyyyyyyyyyyooyyyyyy",
+  ),
+  (
+    "bg 2605934 in IBM866", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzznnoozzzzhhzzzzddzzzzzzzzzzzzzzzzzzzzoozzzzzz",
+  ),
+  (
+    "bg 2323802,777813,3802900,3785528,7666421 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "bg 2323802,777813,3802900,3785528,7666421 in GBK", "ccccccccccccccccccccccjjjjccccccooccccccbbcceecccccccccccccciicckkoocccccc",
+  ),
+  (
+    "bg 2323802,777813,3802900,3785528,7666421 in Big5", "kkkkkkkkkkkkkkkkkkkkbbkkkkkkkkkkkkkkkkkkbbcckkkkkkbbbbbbkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "bg 2323802,777813,3802900,3785528,7666421 in Shift_JIS", "ddddddddddddddddddddddddddddddddddddddddbbbbddggggbbbbdddddddddddddddddddd",
+  ),
+  (
+    "bg 2323802,777813,3802900,3785528,7666421 in ISO-2022-JP", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffafffff",
+  ),
+  (
+    "bg 2323802,777813,3802900,3785528,7666421 in EUC-KR", "ccccccccccccccccccccccggggccccccooccccccbbccddggggccccccccccggccggoocccccc",
+  ),
+  (
+    "bg 2323802,777813,3802900,3785528,7666421 in windows-1251", "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjj",
+  ),
+  (
+    "bg 2323802,777813,3802900,3785528,7666421 in ISO-8859-5", "ttttttttttttttttttttttttttttttttoottttttttttttttttttttttttttttttttootttttt",
+  ),
+  (
+    "bg 2323802,777813,3802900,3785528,7666421 in KOI8-U", "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyooyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyooyyyyyy",
+  ),
+  (
+    "bg 2323802,777813,3802900,3785528,7666421 in IBM866", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoozzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoozzzzzz",
+  ),
+  (
+    "mk 4137378 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "mk 4137378 in GBK", "ccccccccccccccccccccccggggccccccooccccccbbcceeggggccccccccccggccggoocccccc",
+  ),
+  (
+    "mk 4137378 in Big5", "kkkkkkkkkkkkkkkkkkkkbbkkkkkkkkkkkkkkkkkkbbccddkkkkbbccbbkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "mk 4137378 in Shift_JIS", "bbbbbbbbbbbbbbbbbbbbbbddddddbbbbddbbbbbbbbbbddggggbbbbbbbbbbddbbddddbbbbbb",
+  ),
+  (
+    "mk 4137378 in ISO-2022-JP", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffafffff",
+  ),
+  (
+    "mk 4137378 in EUC-KR", "ccccccccccccccccccccccggggccccccooccccccbbccddggggccccccccccggccggoocccccc",
+  ),
+  (
+    "mk 4137378 in windows-1251", "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjnnoojjjjhhjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjj",
+  ),
+  (
+    "mk 4137378 in ISO-8859-5", "ttttttttttttttttttttttttttvvttttoottttttttttddttttttttttttttttttttootttttt",
+  ),
+  (
+    "mk 4137378 in KOI8-U", "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyynnooyyyyhhyyyyddyyyyyyyyyyyyyyyyyyyyooyyyyyy",
+  ),
+  (
+    "mk 4137378 in IBM866", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoozzzzzzzzzzddzzzzzzzzzzzzzzzzzzzzoozzzzzz",
+  ),
+  (
+    "mk 4389137,4330611,4067361,4306923 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "mk 4389137,4330611,4067361,4306923 in windows-1251", "jjjjjjjjjjjjjjjjjjjjjjjjjjvvjjnnoojjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjj",
+  ),
+  (
+    "el 5639435 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "el 5639435 in windows-1253", "llllllllllllllllllllllyyyyvvlllloollllllllllllllllllllllllllyylllloollllll",
+  ),
+  (
+    "el 12975228,13137686,10678066 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "el 12975228,13137686,10678066 in windows-1253", "llllllllllllllllllllllyyyyvvlllloollllllllllllllllllllllllllyylllloollllll",
+  ),
+  (
+    "tr 6984032 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "tr 6984032 in windows-1254", "mmmmmmmmmmmmkkkkkkkkiijjjjvvmmnnoossqqmmbbccddmmmmbbccrrkkkkiikkiioommmmmm",
+  ),
+  (
+    "tr 9984963,1486515,5259133,1235803,7690700 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "tr 9984963,1486515,5259133,1235803,7690700 in windows-1254", "mmmmmmmmmmmmkkkkkkkkiijjjjvvmmmmooppqqmmmmmmmmmmmmmmmmrrkkkkiikkiioommmmmm",
+  ),
+  (
+    "he 2268334 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "he 2268334 in windows-1255", "nnnnnnnnnnnnnnnnnnnnnnjjjjvvnnnnoonnnnhhnnnnnnnnnnnnnnnnnnnnjjnnnnoonnnnnn",
+  ),
+  (
+    "he-visual 2268334 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "he-visual 2268334 in windows-1255", "wwwwwwwwwwwwwwwwwwwwwwjjjjvvwwwwoowwwwhhwwwwwwwwwwwwwwwwwwwwjjwwwwoowwwwww",
+  ),
+  (
+    "he 5912211,5772008,1972352,1849977 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "he 5912211,5772008,1972352,1849977 in windows-1255", "nnnnnnnnnnnnnnnnnnnnnnjjjjvvnnnnoonnnnhhnnnnnnnnnnnnnnnnnnnnjjnnnnoonnnnnn",
+  ),
+  (
+    "he-visual 5912211,5772008,1972352,1849977 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "he-visual 5912211,5772008,1972352,1849977 in windows-1255", "wwwwwwwwwwwwwwwwwwwwwwjjjjvvwwwwoowwwwhhwwwwwwwwwwwwwwwwwwwwjjwwwwoowwwwww",
+  ),
+  (
+    "ar 11977897 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ar 11977897 in windows-1256", "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+  ),
+  (
+    "ar 11977897 in ISO-8859-6", "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuhhuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",
+  ),
+  (
+    "ar 3581850,5120097,7121234,6130833,1584901,9225283 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ar 3581850,5120097,7121234,6130833,1584901,9225283 in windows-1256", "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+  ),
+  (
+    "ar 3581850,5120097,7121234,6130833,1584901,9225283 in ISO-8859-6", "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuhhuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu",
+  ),
+  (
+    "fa 7489988 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "fa 7489988 in windows-1256", "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+  ),
+  (
+    "fa 655717,12208654,7455666,7559373,667566 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "fa 655717,12208654,7455666,7559373,667566 in windows-1256", "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+  ),
+  (
+    "ur 2840654 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ur 2840654 in windows-1256", "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+  ),
+  (
+    "ur 12902360,2446855,9869799,2056634,1434700 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ur 12902360,2446855,9869799,2056634,1434700 in windows-1256", "oooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo",
+  ),
+  (
+    "lt 10546055 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "lt 10721294,11593399,12889770,6914853,4631260 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "lt 10721294,11593399,12889770,6914853,4631260 in windows-1257", "kkkkkkkkkkkkkkkkkkkkiikkkkkkmmkkkkppqqkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "lt 10721294,11593399,12889770,6914853,4631260 in ISO-8859-4", "rrrrrrrrrrrrkkkkkkkkrrjjjjvvmmnnoossqqhhrrrrddrrrrrrrrrrkkkkrrkkrroorrrrrr",
+  ),
+  (
+    "lv 12166350 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "lv 12166350 in windows-1257", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "lv 12166350 in ISO-8859-4", "sssssssssssskkkkkkkkiijjjjvvmmnnoossqqssssssddssssssssrrkkkkiikkssoossssss",
+  ),
+  (
+    "lv 13000363,12487967,13824910,2525094 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "lv 13000363,12487967,13824910,2525094 in windows-1257", "ppppppppppppkkkkkkkkiikkkkkkmmkkkkppqqpppppppppppppppprrkkkkkkkkppkkpppppp",
+  ),
+  (
+    "lv 13000363,12487967,13824910,2525094 in ISO-8859-4", "sssssssssssskkkkkkkkiijjjjvvmmnnoossqqhhssssssssssssssrrkkkkrrkkssoossssss",
+  ),
+  (
+    "et 11310331 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "et 11310331 in windows-1252", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbccddkkkkbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "et 11310457,3709991,9141248,11356205,466848 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "et 11310457,3709991,9141248,11356205,466848 in windows-1252", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbcckkkkkkbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "vi 8796375 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "vi-1258 8796375 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "vi-1258 8796375 in windows-1258", "qqqqqqqqqqqqkkkkkkkkiiqqqqqqmmnnooppqqqqqqqqqqqqqqqqqqrrkkkkqqkkkkooqqqqqq",
+  ),
+  (
+    "vi 8924657,11059230,8947069,3813206 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "vi-1258 8924657,11059230,8947069,3813206 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "vi-1258 8924657,11059230,8947069,3813206 in windows-1258", "qqqqqqqqqqqqkkkkkkkkiiqqqqqqmmnnooppqqqqqqqqqqqqqqqqqqrrkkkkqqkkkkooqqqqqq",
+  ),
+  (
+    "th 7784182 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "th 7784182 in windows-874", "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhbbccddggggbbbbhhhhhhhhhhhhhhhbhhhh",
+  ),
+  (
+    "th 8703070,10335841,10220287,11471504,12627075,8669108 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "th 8703070,10335841,10220287,11471504,12627075,8669108 in windows-874", "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhddhhhhhhhhhhhhhhhhhhhhhhhhhhhh",
+  ),
+  (
+    "zh 845121 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "zh 845121 in GBK", "bbbbbbbbbbbbbbbbbbbbbbjjjjbbbbbboobbbbhhbbccddggggbbbbbbbbbbiibbkkoobbbbbb",
+  ),
+  (
+    "zh 2316126,4459723,609901,2004552,1766157,1186919 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "zh 2316126,4459723,609901,2004552,1766157,1186919 in GBK", "bbbbbbbbbbbbbbbbbbbbbbjjjjbbbbbboobbbbbbbbccddggggbbbbbbbbbbiibbkkoobbbbbb",
+  ),
+  (
+    "zh-Hant 13910915 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "zh-Hant 13910915 in GBK", "bbbbbbbbbbbbbbbbbbbbbbjjjjbbbbbboobbbbbbbbbbddbbbbbbbbbbbbbbiibbkkoobbbbbb",
+  ),
+  (
+    "zh-Hant 13910915 in Big5", "ccccccccccccccccccccccjjjjccccccooccccccbbccddcccccccccccccciicckkoocccccc",
+  ),
+  (
+    "zh-Hant 13910915 in Shift_JIS", "ddddddddddddddddddddddddddddddddddddddddbbbbddddddbbbbdddddddddddddddddddd",
+  ),
+  (
+    "zh-Hant 13910915 in EUC-JP", "bbbbbbbbbbbbbbbbbbbbbbjjjjvvbbbboobbbbbbbbcceeggggbbbbbbbbbbiibbkkoobbbbbb",
+  ),
+  (
+    "zh-Hant 13910915 in ISO-2022-JP", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffafffff",
+  ),
+  (
+    "zh-Hant 13564354,13552265,14012323,1170025 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "zh-Hant 13564354,13552265,14012323,1170025 in GBK", "bbbbbbbbbbbbbbbbbbbbbbjjjjbbbbbboobbbbbbbbbbbbbbbbbbbbbbbbbbiibbkkoobbbbbb",
+  ),
+  (
+    "zh-Hant 13564354,13552265,14012323,1170025 in Big5", "ccccccccccccccccccccccjjjjccccccooccccccbbccddcccccccccccccciicckkoocccccc",
+  ),
+  (
+    "yue 12923344 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "yue 12923344 in GBK", "bbbbbbbbbbbbbbbbbbbbbbjjjjbbbbbboobbbbbbbbbbbbbbbbbbbbbbbbbbiibbkkoobbbbbb",
+  ),
+  (
+    "yue 12923344 in Big5", "ccccccccccccccccccccccjjjjvvccccooccccccbbccddcccccccccccccciicckkoocccccc",
+  ),
+  (
+    "yue 13062108,12905796,12944365 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "yue 13062108,12905796,12944365 in GBK", "bbbbbbbbbbbbbbbbbbbbbbjjjjbbbbbboobbbbbbbbbbbbbbbbbbbbbbbbbbiibbkkoobbbbbb",
+  ),
+  (
+    "ja 205905 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ja 205905 in GBK", "bbbbbbbbbbbbbbbbbbbbbbjjjjbbbbbboobbbbbbbbbbddbbbbbbbbbbbbbbiibbkkoobbbbbb",
+  ),
+  (
+    "ja 205905 in Shift_JIS", "ddddddddddddddddddddddddddddddddddddddddbbbbddddddbbbbdddddddddddddddddddd",
+  ),
+  (
+    "ja 205905 in EUC-JP", "eeeeeeeeeeeeeeeeeeeeeejjjjvveeeeooeeeeeebbcceeggggcccceeeeeeiieekkooeeeeee",
+  ),
+  (
+    "ja 205905 in ISO-2022-JP", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffafffff",
+  ),
+  (
+    "ja 92146,165726,202911,1206022,176217,190323 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ja 92146,165726,202911,1206022,176217,190323 in GBK", "bbbbbbbbbbbbbbbbbbbbbbjjjjbbbbbboobbbbbbbbbbddbbbbbbbbbbbbbbiibbkkoobbbbbb",
+  ),
+  (
+    "ja 92146,165726,202911,1206022,176217,190323 in Shift_JIS", "ddddddddddddddddddddddddddddddddddddddddbbbbddddddbbbbdddddddddddddddddddd",
+  ),
+  (
+    "ja 92146,165726,202911,1206022,176217,190323 in EUC-JP", "eeeeeeeeeeeeeeeeeeeeeeggggeeeeeeooeeeeeebbcceeggggcccceeeeeeggeeggooeeeeee",
+  ),
+  (
+    "ja 92146,165726,202911,1206022,176217,190323 in ISO-2022-JP", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffafffff",
+  ),
+  (
+    "ko 13339944 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ko 13339944 in EUC-KR", "ggggggggggggggggggggggggggggggggooggggggbbcceeggggbbbbggggggggggggoogggggg",
+  ),
+  (
+    "ko 8269786,10603191,9375616,13250721,13118564,8363793 in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ko 8269786,10603191,9375616,13250721,13118564,8363793 in EUC-KR", "ggggggggggggggggggggggggggggggggooggggggbbcceeggggbbbbggggggggggggoogggggg",
+  ),
+  (
+    "empty", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ASCII only", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ESC and ASCII", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ESC, then non-ASCII", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkiikkkkkkkakkkk",
+  ),
+  (
+    "non-ASCII first", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "non-ASCII at 1", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "non-ASCII at 2", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "non-ASCII at 3", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "C1 controls", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoozzzzzzzzzzzzzzzzzzzzzzzzzzzzoozzoozzzzzz",
+  ),
+  (
+    "bytes FD to FF", "jjjjjjjjjjjjkkkkkkkkiijjjjjjmmjjooppqqjjbbccddggggbbccrrkkjjjjkkjjoojmjjjj",
+  ),
+  (
+    "run of five non-ASCII letters", "jjjjjjjjjjjjkkkkkkkkjjjjjjkkjjkkkkjjjjkkjjjjjjjjjjjjjjjjjjjjjjkkjjkkjjjjjj",
+  ),
+  (
+    "Spanish ordinals", "kkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkkkkkkddkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "Italian ordinals", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkddkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "n.º and a digit first", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkddkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "n.º and a digit later", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkddkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "English I and right quote", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbcciikkkkiikkkkookkkkkk",
+  ),
+  (
+    "IBM866 with A0", "zzzzzzzzzzzzzzzzzzzziizzzzzzzzzzoozzzzzzzzzzzzzzzzzzzzrrzzzzzzkkzzoozzzzzz",
+  ),
+  (
+    "long ASCII prefix", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "GBK euro sign", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbbbddggggbbcciikkkkiikkkkookkkkkk",
+  ),
+  (
+    "GB18030 four-byte BMP", "bbbbbbbbbbbbbbbbbbbbbbjjjjbbbbbboobbbbbbbbbbbbbbbbbbbbbbbbkkiiookkoobbbbbb",
+  ),
+  (
+    "GB18030 pointer 7457", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiiookkookkkkkk",
+  ),
+  (
+    "GB18030 four-byte astral", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiiookkookkkkkk",
+  ),
+  (
+    "GB18030 pointer out of range", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbcciikkkkiikkkkookkkkkk",
+  ),
+  (
+    "GB18030 pointer out of range after FE", "kkkkkkkkkkkkkkkkkkkkiikkkkkkmmkkkkppqqkkbbccddkkkkbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "GB18030 bad third byte", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiiookkookkkkkk",
+  ),
+  (
+    "GB18030 FF as third byte", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiiookkookkkkkk",
+  ),
+  (
+    "GB18030 FF as fourth byte", "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjjbbccjjjjjjbbccjjjjjjjjkkjjoojjjjjj",
+  ),
+  (
+    "GBK Mac single bytes", "kkkkkkkkkkkkkkkkkkkkiikkkkkkmmkkkkxxqqkkbbccddkkkkbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "GBK PUA", "cccccccccccccccccccccczzzzvvccccoocccchhbbccddggggcccccccczzzzcczzoocccccc",
+  ),
+  (
+    "GB18030-2022 vertical forms", "ccccccccccccccccccccccyyyyvvccccoocccchhbbccddggggccccccccyyyyccyyoocccccc",
+  ),
+  (
+    "GBK truncated", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkkkkkddkkkkkkkkrrkkkkkkkkkkkkkgkkkk",
+  ),
+  (
+    "Big5 special pointers", "bbbbbbbbbbbbkkkkkkkkbbjjjjbbmmnnoobbqqbbbbccddggggbbccbbkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "Big5 unmapped pairs", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoozzzzzzbbccddggggbbcczzzzzzzzzzzzoozzzzzz",
+  ),
+  (
+    "Big5 Mac single bytes", "mmmmmmmmmmmmkkkkkkkkiikkkkmmmmmmkkxxqqmmbbccddmmmmbbccrrkkkkkkkkkkkkmmmmmm",
+  ),
+  (
+    "lone FF and 80", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "Big5 lead then space", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "Big5 truncated", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookckkkk",
+  ),
+  (
+    "half-width katakana", "ttttttttttttkkkkkkkkiittttvvmmttooppqqttttttddttttttttrrkkttttkkttootktttt",
+  ),
+  (
+    "half-width voicing marks", "ttttttttttttttttttttttttttvvttttoottttttbbccddggggbbbbttttttttttttootttttt",
+  ),
+  (
+    "EUC-JP half-width katakana", "ddddddddddddddddddddddddddddddddddddddddbbccddggggccccdddddddddddddddddddd",
+  ),
+  (
+    "EUC-JP half-width voicing marks", "ddddddddddddddddddddddddddddddddddddddddbbccddggggccccdddddddddddddddddddd",
+  ),
+  (
+    "Shift_JIS 0x80", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbbbddggggbbcciikkkkiikkkkookkkkkk",
+  ),
+  (
+    "Shift_JIS user-defined", "kkkkkkkkkkkkkkkkkkkkjjkkkkkkmmkkkkppjjkkbbccddkkkkccccjjkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "Shift_JIS extensions", "mmmmmmmmmmmmkkkkkkkkmmjjjjmmmmnnoommqqmmbbbbddmmmmbbbbmmkkkkiikkkkoommmmmm",
+  ),
+  (
+    "Shift_JIS excluded pair", "iiiiiiiiiiiikkkkkkkkiijjjjvvmmnnooppqqiibbcciiggggbbbbiikkkkiikkiiooiiiiii",
+  ),
+  (
+    "Shift_JIS truncated", "zzzzzzzzzzzzkkkkkkkkiizzzzvvmmnnooppqqzzzzzzzzzzzzzzzzrrkkzzzzkkzzoozdzzzz",
+  ),
+  (
+    "JIS X 0212", "ggggggggggggggggggggiijjjjggggggooggggggbbcceeggggbbccrrggkkiikkkkoogggggg",
+  ),
+  (
+    "EUC-JP extension pair", "rrrrrrrrrrrrkkkkkkkkrrzzzzvvmmnnoossqqhhbbccddggggccccrrkkzzrrkkrroorrrrrr",
+  ),
+  (
+    "EUC-JP excluded pair", "ppppppppppppkkkkkkkkiiyyyyvvmmnnooppqqhhbbccddppppccccrrkkyyyykkppoopcpppp",
+  ),
+  (
+    "EUC-JP truncated", "zzzzzzzzzzzzkkkkkkkkiizzzzvvmmnnooppqqhhzzzzddzzzzzzzzrrkkzzzzkkzzoozczzzz",
+  ),
+  (
+    "ISO-2022-JP", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffafffff",
+  ),
+  (
+    "ISO-2022-JP Roman and katakana", "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffafffff",
+  ),
+  (
+    "ISO-2022-JP consecutive escapes", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ISO-2022-JP bad escape", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "ISO-2022-JP ESC at the end", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoafaaaa",
+  ),
+  (
+    "ISO-2022-JP shift out", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "code page 949 user-defined", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqccbbccddggggccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "MacKorean single bytes", "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzoozzzzzzzzzzzzggggzzzzzzzzzzzzkkzzoozzzzzz",
+  ),
+  (
+    "compatibility Hanja after Hangul", "ooooooooooooooooooooooooooooooooooooookkbbcceeggggbbbbookkooooookkoooboooo",
+  ),
+  (
+    "EUC-KR truncated", "oooooooooooooooooooooooooooooooooooooohhooooddooooooooooooooooooooooogoooo",
+  ),
+  (
+    "Big5 outside the BMP", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqccbbccddggggcccciikkkkiikkkkoocccccc",
+  ),
+  (
+    "Big5 Mac byte before a digit, then Big5", "cccccccccccckkkkkkkkiijjjjccmmccooppqqccccccddccccccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "Shift_JIS pair 82 F9", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbccddggggbbcciikkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "Shift_JIS pair 82 FA", "iiiiiiiiiiiikkkkkkkkiijjjjvvmmnnooppqqiibbcciiggggbbcciikkkkiikkiiooiiiiii",
+  ),
+  (
+    "Shift_JIS pair 84 DC", "kkkkkkkkkkkkkkkkkkkkiikkkkkkmmkkkkkkkkkkbbccddggggbbcciikkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "Shift_JIS pair 84 DD", "mmmmmmmmmmmmkkkkkkkkiijjjjvvmmmmooppqqmmbbccmmggggbbcciikkkkiiooiioommmmmm",
+  ),
+  (
+    "Shift_JIS pair 84 E4", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbcckkggggbbcciikkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "Shift_JIS pair 84 E5", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbccddggggbbcciikkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "Shift_JIS pair 84 FA", "iiiiiiiiiiiikkkkkkkkiijjjjvvmmnnooppqqiibbccddggggbbcciikkkkiikkiiooiiiiii",
+  ),
+  (
+    "Shift_JIS pair 84 FB", "mmmmmmmmmmmmkkkkkkkkiijjjjvvmmmmooppqqmmbbccmmggggbbcciikkkkiikkkkoommmmmm",
+  ),
+  (
+    "Shift_JIS pair 86 F1", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbccddggggbbcciikkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "Shift_JIS pair 86 F2", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkknnkkkkkkkkbbcckkggggbbcciikkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "Shift_JIS pair 86 FA", "iiiiiiiiiiiikkkkkkkkiijjjjvvmmnnooppqqiibbcciiggggbbcciikkkkiikkiiooiiiiii",
+  ),
+  (
+    "Shift_JIS pair 86 FB", "mmmmmmmmmmmmkkkkkkkkiijjjjvvmmmmooppqqmmbbccddggggbbcciikkkkiikkkkoommmmmm",
+  ),
+  (
+    "Shift_JIS pair 87 76", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbcciikkkkiikkkkookkkkkk",
+  ),
+  (
+    "Shift_JIS pair 87 77", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbcciikkkkiikkkkookkkkkk",
+  ),
+  (
+    "Shift_JIS pair 87 7D", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbcciikkkkiikkkkookkkkkk",
+  ),
+  (
+    "Shift_JIS pair 87 7E", "ddddddddddddkkkkkkkkiijjjjvvmmnnooppqqddbbccddddddbbcciikkkkiikkkkoodddddd",
+  ),
+  (
+    "Shift_JIS pair FC F4", "qqqqqqqqqqqqkkkkkkkkiijjjjvvmmqqooppqqqqbbcceeggggbbccrrkkkkiikkkkooqqqqqq",
+  ),
+  (
+    "Shift_JIS pair FC F5", "iiiiiiiiiiiikkkkkkkkiijjjjvvmmiiooppqqiibbcceeggggbbccrrkkkkiikkiiooiiiiii",
+  ),
+  (
+    "EUC-JP pair A8 DE", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmbbooppqqbbbbccddggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "EUC-JP pair A8 DF", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmbbooppqqhhbbccddggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "EUC-JP pair A8 E6", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbccbbggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "EUC-JP pair A8 E7", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "EUC-JP pair AC F3", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddkkkkbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-JP pair AC F4", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-JP pair AC FC", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-JP pair AC FD", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-JP pair AD D7", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnuuppqqhhbbccddggggbbccrrkkkkiiuukkuukkkkkk",
+  ),
+  (
+    "EUC-JP pair AD D8", "ppppppppppppkkkkkkkkiijjjjvvmmnnooppqqhhbbccddppppbbccrrkkkkiikkppoopppppp",
+  ),
+  (
+    "EUC-JP pair AD DE", "mmmmmmmmmmmmkkkkkkkkiijjjjvvmmmmooppqqmmbbccddmmmmbbccrrkkkkiiooiioommmmmm",
+  ),
+  (
+    "EUC-JP pair AD DF", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmkkooppqqhhbbcceekkkkbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-JP JIS X 0212 pair A2 A1", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-JP JIS X 0212 pair A3 A1", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-JP JIS X 0212 pair ED FE", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-JP JIS X 0212 pair FE F6", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-JP JIS X 0212 pair FE F7", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-KR pair A1 7A", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "EUC-KR pair A1 7B", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "EUC-KR pair A1 7D", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "EUC-KR pair A1 7E", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqhhbbccddccccccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "EUC-KR pair A2 7A", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "EUC-KR pair A2 7B", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqhhbbccddccccccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "EUC-KR pair A2 7D", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqhhbbccddccccccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "EUC-KR pair A2 7E", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqhhbbccddccccccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "EUC-KR pair A3 7A", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "EUC-KR pair A3 7B", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "EUC-KR pair A3 7D", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "EUC-KR pair A3 7E", "cccccccccccckkkkkkkkiijjjjvvmmnnooppqqhhbbccddccccccccrrkkkkiikkkkoocccccc",
+  ),
+  (
+    "EUC-KR pair A8 7A", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "EUC-KR pair A8 7B", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "EUC-KR pair A8 7D", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "EUC-KR pair A8 7E", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbccddbbbbbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "EUC-KR pair A9 7A", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "EUC-KR pair A9 7B", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbccddbbbbbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "EUC-KR pair A9 7D", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbccddbbbbbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "EUC-KR pair A9 7E", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqhhbbccddbbbbbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "EUC-KR pair AA 7A", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-KR pair AA 7B", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbccddggggbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "EUC-KR pair AA 7D", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbccddggggbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "EUC-KR pair AA 7E", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbccddkkkkbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "EUC-KR pair AD 7A", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-KR pair AD 7B", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-KR pair AD 7D", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-KR pair AD 7E", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-KR pair AE 7A", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-KR pair AE 7B", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-KR pair AE 7D", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "EUC-KR pair AE 7E", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookkkkkk",
+  ),
+  (
+    "all-caps Russian in KOI8-U", "yyyyyyyyyyyyyyyyyyyyyyyyyyvvyyyyooyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyooyyyyyy",
+  ),
+  (
+    "all-caps Russian in windows-1251", "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjoojjjjjjjjjjddjjjjjjjjjjjjjjjjjjjjoojjjjjj",
+  ),
+  (
+    "mixed-case Greek in windows-1253", "lllllllllllllllllllllljjjjvvlllloolllllllllllllllllllllllllljjlllloolbllll",
+  ),
+  (
+    "Greek next to Latin in ISO-8859-7", "llllllllllllllllllllllttttvvlllloollllllllllddllllllllllllllttlllloollllll",
+  ),
+  (
+    "Arabic and French in windows-1256", "oooooooooooooooooooooooooooooooooooooohhoooooooooooooooooooooooooooooooooo",
+  ),
+  (
+    "UTF-8 with BOM in UTF-8", "akakakakakakakakakakaiajajavamanaoapaqahabacadagagabacarakakaiakakaoaaaaaa",
+  ),
+  (
+    "truncated UTF-8 in UTF-8", "kkkkkkkkkkkkkkkkkkkkiijjjjvvmmnnooppqqhhbbccddggggbbccrrkkkkiikkkkookakkkk",
+  ),
+  (
+    "pinyin and Hanzi in GBK", "bbbbbbbbbbbbbbbbbbbbbbjjjjvvbbbboobbbbhhbbcceeggggbbbbbbbbbbiibbkkoobbbbbb",
+  ),
+  (
+    "Russian in GBK", "ccccccccccccccccccccccjjjjvvccccooccccccbbcceeggggcccccccccciicckkoocccccc",
+  ),
+  (
+    "Russian in Big5", "kkkkkkkkkkkkkkkkkkkkiikkkkkkkkkkkkkkkkkkbbccddkkkkbbccrrkkkkkkkkkkkkkkkkkk",
+  ),
+  (
+    "Hanzi next to Latin in Big5", "ccccccccccccccccccccccjjjjvvccccoocccchhbbccddggggcccccccccciicckkoocccccc",
+  ),
+  (
+    "Kanji next to Latin in Shift_JIS", "ddddddddddddddddddddddddddddddddddddddddbbbbddggggbbbbdddddddddddddddddddd",
+  ),
+  (
+    "wi and we in EUC-JP", "ccccccccccccccccccccccjjjjvvccccoocccchhbbcceeggggcccccccccciicckkoocccccc",
+  ),
+  (
+    "wi and we in Shift_JIS", "ddddddddddddddddddddddddddddddddddddddddbbbbddggggbbbbdddddddddddddddddddd",
+  ),
+  (
+    "Russian in Shift_JIS", "bbbbbbbbbbbbkkkkkkkkiijjjjvvmmnnooppqqbbbbbbddggggbbbbrrkkkkiikkkkoobbbbbb",
+  ),
+  (
+    "long Hangul word in EUC-KR", "ggggggggggggggggggggggggggggggggoogggghhbbcceeggggbbccggggggggggggoogggggg",
+  ),
+  (
+    "Hanja after Hangul in EUC-KR", "eeeeeeeeeeeeeeeeeeeeeejjjjvveeeeooeeeeeebbcceeggggcccceeeeeeiieekkooeeeeee",
+  ),
+  (
+    "Hangul outside KS X 1001 in EUC-KR", "ggggggggggggggggggggggggggggggggooggggggbbccddggggbbbbggggggggggggoogggggg",
+  ),
+  (
+    "Russian in EUC-KR", "ccccccccccccccccccccccjjjjvvccccooccccccbbccddggggcccccccccciicckkoocccccc",
+  ),
+  (
+    "Hebrew without punctuation in windows-1255", "nnnnnnnnnnnnnnnnnnnnnnjjjjggnnnnoonnnnhhbbcceeggggccccnnnnnnjjnnnnoonnnnnn",
+  ),
+  (
+    "Hebrew comma without a space in windows-1255", "nnnnnnnnnnnnnnnnnnnnnnjjjjkknnnnkknnnnkkbbcceeggggccccnnnnnnjjnnnnkknnnnnn",
+  ),
+  (
+    "visual Hebrew after a double low line in ISO-8859-8", "wwwwwwwwwwwwwwwwwwwwwwjjjjvvwwwwoowwwwhhwwwwwwwwwwwwwwwwwwjjjjwwjjoowwwwww",
   ),
 ]

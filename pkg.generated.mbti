@@ -10,11 +10,14 @@ pub fn check_utf8(BytesView) -> Utf8Status
 
 pub fn sniff_bom(BytesView) -> (Encoding, Int32)?
 
+pub fn tld_may_affect_guess(String) -> Bool
+
 // Errors
 
 // Types and methods
 type Detector
 pub fn Detector::feed(Self, BytesView, last? : Bool) -> Bool
+pub fn Detector::guess(Self, tld? : String, allow_utf8? : Bool) -> Encoding
 pub fn Detector::new(allow_iso_2022_jp? : Bool) -> Self
 pub fn Detector::score(Self, Encoding) -> Int64?
 

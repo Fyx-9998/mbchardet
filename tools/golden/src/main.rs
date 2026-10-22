@@ -1,7 +1,7 @@
-//! Writes the golden test data: golden_data_test.mbt, the scores chardetng
-//! 1.0.0 gives the test inputs, and golden_trace_wbtest.mbt, how the GBK,
-//! Big5, Shift_JIS, EUC-JP, ISO-2022-JP and EUC-KR decoders of encoding_rs
-//! answer byte by byte.
+//! Writes the golden test data: golden_data_test.mbt, the scores and guesses
+//! chardetng 1.0.0 gives the test inputs, and golden_trace_wbtest.mbt, how
+//! the GBK, Big5, Shift_JIS, EUC-JP, ISO-2022-JP and EUC-KR decoders of
+//! encoding_rs answer byte by byte.
 //!
 //!     cargo run --release --manifest-path tools/golden/Cargo.toml -- \
 //!         tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt
@@ -11,8 +11,9 @@
 //! hand-written edge cases, without duplicates. Each input is fed in several
 //! ways: whole with the end of the stream marked, whole without it, and in
 //! chunks of 1, 2, 3 and 7 bytes. For each way the file records chardetng's
-//! find_score for every encoding mbchardet scores so far; chunked results are
-//! written only where they differ from the whole input.
+//! find_score for every encoding mbchardet scores; chunked results are
+//! written only where they differ from the whole input. The guesses are
+//! described in `guesses`.
 //!
 //! The traces feed byte sequences to a new decoder one byte per call, as
 //! chardetng's candidates do, and hash every answer: the code units written
@@ -20,7 +21,7 @@
 //! described in `traces` and repeated in cjk_decoder_wbtest.mbt,
 //! japanese_decoder_wbtest.mbt and korean_decoder_wbtest.mbt.
 
-use chardetng::{EncodingDetector, Iso2022JpDetection};
+use chardetng::{EncodingDetector, Iso2022JpDetection, Utf8Detection};
 use encoding_rs::*;
 use std::fmt::Write as _;
 use std::fs;
@@ -56,8 +57,55 @@ const ENCODINGS: [&Encoding; 26] = [
 
 const CHUNK_SIZES: [usize; 4] = [1, 2, 3, 7];
 
-fn scores(input: &[u8], chunk: Option<usize>, last: bool) -> String {
-    let mut detector = EncodingDetector::new(Iso2022JpDetection::Allow);
+/// The labels the guesses are recorded for: at least one of each class in
+/// chardetng's tld.rs, and labels that fall back to a default class.
+const TLDS: [Option<&str>; 34] = [
+    None,
+    Some("com"),
+    Some("in"),
+    Some("museum"),
+    // Too short for the Punycode table.
+    Some("xn--abc"),
+    // tld.rs lists this one as fiqs8S, which no lower-case label matches.
+    Some("xn--fiqs8s"),
+    // Two letters missing from the table, which makes them Western.
+    Some("zz"),
+    Some("de"),
+    Some("edu"),
+    Some("xn--54b7fta0cc"),
+    Some("cz"),
+    Some("ru"),
+    Some("xn--p1ai"),
+    Some("gr"),
+    Some("tr"),
+    Some("il"),
+    Some("eg"),
+    Some("lt"),
+    Some("vn"),
+    Some("th"),
+    Some("cn"),
+    Some("tw"),
+    Some("jp"),
+    Some("kr"),
+    Some("xn--3e0b707e"),
+    Some("sg"),
+    Some("hk"),
+    Some("hu"),
+    Some("is"),
+    Some("ge"),
+    Some("ba"),
+    Some("my"),
+    Some("eu"),
+    Some("xn--mgbaam7a8h"),
+];
+
+fn fed(
+    input: &[u8],
+    chunk: Option<usize>,
+    last: bool,
+    iso_2022_jp: Iso2022JpDetection,
+) -> EncodingDetector {
+    let mut detector = EncodingDetector::new(iso_2022_jp);
     match chunk {
         None => {
             detector.feed(input, last);
@@ -71,6 +119,11 @@ fn scores(input: &[u8], chunk: Option<usize>, last: bool) -> String {
             detector.feed(final_chunk, last);
         }
     }
+    detector
+}
+
+fn scores(input: &[u8], chunk: Option<usize>, last: bool) -> String {
+    let detector = fed(input, chunk, last, Iso2022JpDetection::Allow);
     let values: Vec<String> = ENCODINGS
         .iter()
         .map(|e| match detector.find_score(e) {
@@ -79,6 +132,36 @@ fn scores(input: &[u8], chunk: Option<usize>, last: bool) -> String {
         })
         .collect();
     values.join(" ")
+}
+
+/// A guess as one letter: `a` for the first of ENCODINGS, and so on.
+fn letter(encoding: &'static Encoding) -> char {
+    let i = ENCODINGS
+        .iter()
+        .position(|&e| e == encoding)
+        .expect("a guess outside ENCODINGS");
+    char::from(b'a' + i as u8)
+}
+
+/// chardetng's guesses for `input`, as letters: fed whole with the end
+/// marked, for each of TLDS with UTF-8 allowed and then denied; then, with
+/// no TLD and UTF-8 allowed, from a detector with ISO-2022-JP denied, fed
+/// whole without the end marked, and fed in chunks of each of CHUNK_SIZES.
+fn guesses(input: &[u8]) -> String {
+    let mut out = String::new();
+    let detector = fed(input, None, true, Iso2022JpDetection::Allow);
+    for tld in TLDS {
+        for utf8 in [Utf8Detection::Allow, Utf8Detection::Deny] {
+            out.push(letter(detector.guess(tld.map(str::as_bytes), utf8)));
+        }
+    }
+    let guess = |detector: EncodingDetector| letter(detector.guess(None, Utf8Detection::Allow));
+    out.push(guess(fed(input, None, true, Iso2022JpDetection::Deny)));
+    out.push(guess(fed(input, None, false, Iso2022JpDetection::Allow)));
+    for &size in CHUNK_SIZES.iter() {
+        out.push(guess(fed(input, Some(size), true, Iso2022JpDetection::Allow)));
+    }
+    out
 }
 
 fn bytes_literal(bytes: &[u8]) -> String {
@@ -203,6 +286,12 @@ fn edge_cases() -> Vec<(String, Vec<u8>)> {
         }
     }
     cases.push(("Big5 outside the BMP", astral.expect("Big5 has astral pairs")));
+    // A Mac Big5 single byte before a digit rules out GBK, which takes the
+    // two bytes for the start of a four-byte sequence, but not Big5.
+    let mut mac_byte = b"\xFE1 ".to_vec();
+    let text = "我們今天在學校學習中文，老師說我們的進步很大。明天我們還要繼續努力學習，大家都很高興。";
+    mac_byte.extend(encode(text, BIG5).expect("encodable"));
+    cases.push(("Big5 Mac byte before a digit, then Big5", mac_byte));
     let mut owned: Vec<(String, Vec<u8>)> = cases
         .into_iter()
         .map(|(label, bytes)| (label.to_string(), bytes))
@@ -256,6 +345,9 @@ fn edge_cases() -> Vec<(String, Vec<u8>)> {
         ("Hanja after Hangul", "한국韓國", EUC_KR),
         ("Hangul outside KS X 1001", "똠방각하", EUC_KR),
         ("Russian", "Привет, мир", EUC_KR),
+        // The guess compares the punctuation of logical and visual Hebrew.
+        ("Hebrew without punctuation", "שלום עולם ומלואו", WINDOWS_1255),
+        ("Hebrew comma without a space", "שלום,עולם.", WINDOWS_1255),
     ] {
         let mut bytes = encode(text, encoding).expect("edge case must be encodable");
         if label == "truncated UTF-8" {
@@ -263,6 +355,11 @@ fn edge_cases() -> Vec<(String, Vec<u8>)> {
         }
         owned.push((format!("{} in {}", label, encoding.name()), bytes));
     }
+    // Visual Hebrew, stored in reverse order, after a double low line, which
+    // windows-1255 lacks: logical Hebrew is ruled out.
+    let visual: String = "שלום, עולם. מה שלומך?".chars().rev().collect();
+    let bytes = encode(&format!("\u{2017} {}", visual), ISO_8859_8).expect("encodable");
+    owned.push(("visual Hebrew after a double low line in ISO-8859-8".to_string(), bytes));
     owned
 }
 
@@ -549,6 +646,26 @@ fn main() {
             chunked.join(", ")
         )
         .unwrap();
+    }
+    out.push_str("]\n\n");
+    out.push_str("///|\n/// The labels the guesses are for, with chardetng's tld_may_affect_guess.\n");
+    out.push_str("let golden_tlds : Array[(String?, Bool)] = [\n");
+    for tld in TLDS {
+        let affects = EncodingDetector::tld_may_affect_guess(tld.map(str::as_bytes));
+        match tld {
+            Some(label) => writeln!(out, "  (Some(\"{}\"), {}),", label, affects).unwrap(),
+            None => writeln!(out, "  (None, {}),", affects).unwrap(),
+        }
+    }
+    out.push_str("]\n\n");
+    out.push_str("///|\n/// (label, guesses) for each of golden_cases, the guesses as letters,\n");
+    out.push_str("/// \"a\" for the first of golden_encodings: fed whole with the end marked,\n");
+    out.push_str("/// for each of golden_tlds with UTF-8 allowed and then denied; then, with\n");
+    out.push_str("/// no TLD and UTF-8 allowed, from a detector with ISO-2022-JP denied, fed\n");
+    out.push_str("/// whole without the end marked, and fed in chunks of 1, 2, 3 and 7 bytes.\n");
+    out.push_str("let golden_guesses : Array[(String, String)] = [\n");
+    for (label, bytes) in &inputs {
+        writeln!(out, "  (\"{}\", \"{}\"),", label, guesses(bytes)).unwrap();
     }
     out.push_str("]\n");
     fs::write(&args[2], out).expect("cannot write the output");
