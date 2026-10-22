@@ -2,4 +2,5 @@ warnings = "-implicit_impl_as_method"
 
 import {
   "moonbitlang/core/encoding/utf8",
+  "moonbitlang/core/string",
 } for "test"

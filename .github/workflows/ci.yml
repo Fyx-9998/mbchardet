@@ -73,3 +73,40 @@ jobs:
         run: moon test --target js
       - name: Test native
         run: moon test --target native
+
+  chardetng-data:
+    name: chardetng data
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - name: Regenerate the golden data with chardetng 1.0.0
+        run: cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- tools/corpus.tsv golden_data_test.mbt
+
+      - name: Regenerate the tables from chardetng's data.rs
+        run: |
+          manifest=$(cargo metadata --locked --format-version 1 --manifest-path tools/golden/Cargo.toml \
+            | python3 -c 'import json, sys; print(next(p["manifest_path"] for p in json.load(sys.stdin)["packages"] if p["name"] == "chardetng"))')
+          python3 tools/gen_data.py "$(dirname "$manifest")/src/data.rs" single_byte_data.mbt
+
+      - name: Format the generated files
+        run: moon fmt
+
+      - name: Generated files match the committed ones
+        run: |
+          git status --porcelain
+          test -z "$(git status --porcelain)"
+
+      - name: Upload regenerated files
+        if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: regenerated
+          path: |
+            golden_data_test.mbt
+            single_byte_data.mbt

@@ -6,8 +6,8 @@ they can be decoded correctly instead of turning into mojibake.
 
 ## Status
 
-Early development. The building blocks below are implemented; the
-statistical detector is not.
+Early development. The detector scores UTF-8 and the single-byte encodings
+but does not make a final guess yet, and the CJK encodings are not covered.
 
 Implemented:
 
@@ -22,19 +22,28 @@ Implemented:
   tells pure ASCII apart from UTF-8 with other characters, and an error gives
   the offset and length of the first malformed sequence. Splitting the input
   into chunks never changes the result.
+- `Detector`: chardetng's detector, ported from
+  [chardetng](https://github.com/hsivonen/chardetng) 1.0.0, the detector
+  Firefox uses for unlabeled legacy content. Feed it the input in chunks with
+  `feed`; `score(encoding)` then tells how plausible the input is in that
+  encoding, or that it is ruled out. It scores UTF-8 and 19 single-byte
+  encodings: windows-874, windows-1250 to windows-1258, ISO-8859-2, -4, -5,
+  -6, -7, -8 and -13, KOI8-U and IBM866. The scores are chardetng's: a golden
+  test compares them with chardetng 1.0.0 on 206 inputs, each fed whole and
+  in chunks of 1, 2, 3 and 7 bytes.
 - `Encoding`: the encodings mbchardet reports, with `name()` giving the
-  canonical name from the Encoding Standard (`"UTF-8"`, `"UTF-16BE"`,
-  `"UTF-16LE"`). These names are valid labels for any decoder that follows the
-  standard.
+  canonical name from the Encoding Standard (`"UTF-8"`, `"windows-1251"`,
+  ...) and `Encoding::all()`. These names are valid labels for any decoder
+  that follows the standard.
 
 Planned, not implemented yet:
 
-- Detection of unlabeled legacy encodings (GBK, Big5, Shift_JIS, EUC-JP,
-  EUC-KR, ISO-2022-JP, the windows-125x and ISO-8859 families, KOI8-U,
-  IBM866), and deciding between them and UTF-8, ported from
-  [chardetng](https://github.com/hsivonen/chardetng) 1.0.0 and checked
-  against it with golden tests. Valid UTF-8 is not proof that UTF-8 was
-  meant; that decision belongs to the detector.
+- chardetng's candidates for GBK, Big5, Shift_JIS, EUC-JP, EUC-KR and
+  ISO-2022-JP, and its final guess, which compares all candidates and can
+  take a top-level domain as a hint. Until then, picking the highest score
+  by hand, as in the example below, only chooses between the encodings
+  above. Valid UTF-8 is not proof that UTF-8 was meant; that decision
+  belongs to the guess.
 - The encoding sniffing steps of the
   [HTML Standard](https://html.spec.whatwg.org/multipage/parsing.html#determining-the-character-encoding):
   byte order mark, transport-layer label, `<meta>` prescan.
@@ -97,6 +106,56 @@ test {
 }
 ```
 
+The detector scores each encoding; higher is more plausible. Here a Russian
+sentence in windows-1251 is not valid UTF-8, and windows-1251 scores highest
+of the single-byte encodings:
+
+```mbt check
+///|
+test {
+  // "Надеюсь, вы не слишком много пьёте.", Tatoeba sentence 4792710
+  // (CC BY 2.0 FR), in windows-1251.
+  let data = b"\xCD\xE0\xE4\xE5\xFE\xF1\xFC, \xE2\xFB \xED\xE5 \xF1\xEB\xE8\xF8\xEA\xEE\xEC \xEC\xED\xEE\xE3\xEE \xEF\xFC\xB8\xF2\xE5."
+  let detector = @mbchardet.Detector::new()
+  detector.feed(data[:], last=true) |> ignore
+  assert_eq(detector.score(@mbchardet.Utf8), None)
+  let mut best = None
+  for encoding in @mbchardet.Encoding::all() {
+    match (detector.score(encoding), best) {
+      (Some(score), None) => best = Some((encoding, score))
+      (Some(score), Some((_, best_score))) if score > best_score =>
+        best = Some((encoding, score))
+      _ => ()
+    }
+  }
+  assert_eq(best.map(b => b.0), Some(@mbchardet.Windows1251))
+}
+```
+
+Input can arrive in chunks: call `feed` for each and set `last=true` on the
+final one, which may be empty. The end of the input counts as a space after
+the last word, so leave `last` unset to score a prefix of a longer stream.
+
+## Testing
+
+`moon test` runs unit tests and a golden test against data that chardetng
+itself produced. The data is generated, and CI checks that regenerating it
+gives the committed files:
+
+- `tools/gen_corpus.py` picks sentences from Tatoeba into `tools/corpus.tsv`.
+- `tools/golden` (Rust, chardetng 1.0.0 pinned in `Cargo.lock`) encodes each
+  sentence in every encoding that can represent it, adds edge cases, and
+  writes chardetng's scores to `golden_data_test.mbt`.
+- `tools/gen_data.py` writes chardetng's tables from its `src/data.rs` to
+  `single_byte_data.mbt`.
+
+```
+python tools/gen_corpus.py CACHE_DIR tools/corpus.tsv
+cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- tools/corpus.tsv golden_data_test.mbt
+python tools/gen_data.py CHARDETNG_SOURCE/src/data.rs single_byte_data.mbt
+moon fmt
+```
+
 ## Platforms
 
 mbchardet is pure MoonBit with no dependencies. CI checks and tests it on the
@@ -107,5 +166,7 @@ wasm, wasm-gc, js and native backends, on Linux, macOS and Windows.
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or
 [MIT license](LICENSE-MIT), at your option.
 
-The current code is written from the Encoding Standard; it contains no code
-from other projects.
+The detector is ported from chardetng 1.0.0 (Apache-2.0 OR MIT, copyright
+Mozilla Foundation), and its tables come from chardetng's `data.rs`, which is
+dedicated to the public domain. The test corpus consists of Tatoeba
+sentences under CC BY 2.0 FR. [NOTICE](NOTICE) lists what comes from where.

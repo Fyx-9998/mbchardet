@@ -13,11 +13,36 @@ pub fn sniff_bom(BytesView) -> (Encoding, Int32)?
 // Errors
 
 // Types and methods
+type Detector
+pub fn Detector::feed(Self, BytesView, last? : Bool) -> Bool
+pub fn Detector::new() -> Self
+pub fn Detector::score(Self, Encoding) -> Int64?
+
 pub(all) enum Encoding {
   Utf8
   Utf16Be
   Utf16Le
+  Windows874
+  Windows1250
+  Windows1251
+  Windows1252
+  Windows1253
+  Windows1254
+  Windows1255
+  Windows1256
+  Windows1257
+  Windows1258
+  Iso8859_2
+  Iso8859_4
+  Iso8859_5
+  Iso8859_6
+  Iso8859_7
+  Iso8859_8
+  Iso8859_13
+  Koi8U
+  Ibm866
 } derive(Eq, Hash, @debug.Debug)
+pub fn Encoding::all() -> Array[Self]
 pub fn Encoding::name(Self) -> String
 pub fn Encoding::to_string(Self) -> String
 pub impl Show for Encoding
