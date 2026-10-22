@@ -22,6 +22,8 @@ pub(all) enum Encoding {
   Utf8
   Utf16Be
   Utf16Le
+  Gbk
+  Big5
   Windows874
   Windows1250
   Windows1251

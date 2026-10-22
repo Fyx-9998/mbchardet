@@ -1,11 +1,12 @@
-"""Writes chardetng's single-byte detection tables as a MoonBit file.
+"""Writes chardetng's detection tables as a MoonBit file.
 
-    python tools/gen_data.py PATH/TO/chardetng-1.0.0/src/data.rs single_byte_data.mbt
+    python tools/gen_data.py PATH/TO/chardetng-1.0.0/src/data.rs detector_data.mbt
 
 Reads the byte classification tables, the character-pair score tables and
-the SINGLE_BYTE_DATA entries from chardetng's data.rs and writes them
-without changes. The tables of the CJK detectors (frequent_simplified,
-frequent_kanji, frequent_hangul) are not written yet.
+the SINGLE_BYTE_DATA entries from chardetng's data.rs, and the frequent
+Hanzi of the GBK detector (frequent_simplified), and writes them without
+changes. The tables of the Japanese and Korean detectors (frequent_kanji,
+frequent_hangul) are not written yet.
 
 The script checks the layout of data.rs instead of guessing: every table
 must have the length its declaration states, every pair table the length
@@ -40,7 +41,9 @@ ENCODINGS = {
     "IBM866_INIT": "Ibm866",
 }
 
-CJK_TABLES = {"frequent_simplified", "frequent_kanji", "frequent_hangul"}
+# u16 tables of the CJK detectors that are written, and those not yet.
+CJK_TABLES = ["frequent_simplified"]
+LATER_TABLES = {"frequent_kanji", "frequent_hangul"}
 
 
 def fail(message):
@@ -139,6 +142,9 @@ def render(tables, records):
         out += ["///|", f"let {table} : Bytes = {bytes_literal(tables[table])}", ""]
     for i, record in enumerate(records):
         out += ["///|", f"const {record[0]}_INDEX : Int = {i}", ""]
+    for table in CJK_TABLES:
+        values = ", ".join(f"0x{v:04X}" for v in tables[table])
+        out += ["///|", f"let {table} : FixedArray[Int] = [{values}]", ""]
     out += ["///|", "let single_byte_data : FixedArray[SingleByteData] = ["]
     for i, (index_name, encoding, lower, upper, probabilities, a, n) in enumerate(records):
         out += [
@@ -161,7 +167,7 @@ def main():
         sys.exit(__doc__)
     with open(sys.argv[1], encoding="utf-8") as f:
         tables, records = parse(f.read())
-    unused = set(tables) - CJK_TABLES - {t for r in records for t in r[2:5]}
+    unused = set(tables) - set(CJK_TABLES) - LATER_TABLES - {t for r in records for t in r[2:5]}
     if unused:
         fail(f"tables {sorted(unused)} are neither used nor known CJK tables")
     with open(sys.argv[2], "w", encoding="utf-8", newline="\n") as f:

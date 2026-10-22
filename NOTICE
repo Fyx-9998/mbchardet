@@ -1,7 +1,8 @@
 mbchardet
 Copyright (c) 2026 Fyx-9998
 Licensed under the Apache License, Version 2.0 (LICENSE-APACHE) or the MIT
-license (LICENSE-MIT), at your option.
+license (LICENSE-MIT), at your option, except cjk_index_data.mbt, which is
+licensed under the BSD 3-Clause License (LICENSE-WHATWG); see below.
 
 This project ports the encoding detector chardetng.
 
@@ -29,17 +30,44 @@ What is taken from chardetng 1.0.0:
     src/lib.rs, and SingleByteData with its classification and pair scoring,
     ported from src/data.rs. The punctuation counts of the Hebrew candidates
     are left out until the final guess that reads them is ported.
+  - chinese.mbt: the GBK and Big5 candidates (GbkCandidate, Big5Candidate)
+    and their constants, ported from src/lib.rs. chardetng starts a new GBK
+    decoder after two kinds of malformed bytes; the port leaves that out
+    because its decoder starts over after any malformed sequence.
   - detector.mbt: how EncodingDetector feeds candidates (skipping leading
     ASCII, keeping two bytes of context, treating the end of the stream as a
     space) and how find_score reports a score without a top-level domain,
-    ported from src/lib.rs. The CJK and ISO-2022-JP candidates and the
-    guess are not ported yet.
-  - single_byte_data.mbt: the byte classification and character-pair score
-    tables, written by tools/gen_data.py from src/data.rs without changes.
-    src/data.rs states: "Any copyright is dedicated to the Public Domain.
+    ported from src/lib.rs. The Shift_JIS, EUC-JP, EUC-KR and ISO-2022-JP
+    candidates and the guess are not ported yet.
+  - detector_data.mbt: the byte classification and character-pair score
+    tables and the frequent simplified Hanzi, written by tools/gen_data.py
+    from src/data.rs without changes. src/data.rs states: "Any copyright is
+    dedicated to the Public Domain.
     https://creativecommons.org/publicdomain/zero/1.0/"
   - The expected scores in golden_data_test.mbt, produced by running
     chardetng 1.0.0 (tools/golden).
+
+encoding_rs 0.8.42
+  https://github.com/hsivonen/encoding_rs
+  encoding_rs is copyright Mozilla Foundation, licensed under the Apache
+  License, Version 2.0 or the MIT license, at your option.
+
+  cjk_decoder.mbt decodes GB18030 and Big5 as the Encoding Standard
+  specifies; how it reports a malformed sequence byte by byte (its length,
+  and whether a following ASCII byte belongs to it) follows the GB18030 and
+  Big5 decoders of encoding_rs 0.8.42, which chardetng's candidates are fed
+  with. No code is copied. golden_trace_wbtest.mbt holds hashes of how the
+  encoding_rs decoders answer, produced by tools/golden.
+
+WHATWG Encoding Standard
+  https://encoding.spec.whatwg.org/
+  Copyright © WHATWG (Apple, Google, Mozilla, Microsoft).
+
+  cjk_index_data.mbt is written by tools/gen_index.py from index-gb18030.txt,
+  index-gb18030-ranges.txt and index-big5.txt of whatwg/encoding commit
+  2c3853e461afd718be198772170d024e427aee21, without changes to the mappings.
+  The standard is licensed under CC BY 4.0; its portions incorporated into
+  source code are licensed under the BSD 3-Clause License, LICENSE-WHATWG.
 
 Tatoeba
   https://tatoeba.org
@@ -50,8 +78,9 @@ Tatoeba
   each row with the Tatoeba ids of its sentences; tools/gen_corpus.py
   describes how they were chosen and the changes made to some rows
   (Romanian cedillas, Vietnamese tone marks for windows-1258, Hebrew in
-  reverse order). golden_data_test.mbt contains these sentences encoded in
-  UTF-8 and single-byte encodings.
+  reverse order, simplified Chinese chosen as text Big5 cannot represent).
+  golden_data_test.mbt contains these sentences encoded in UTF-8, GBK, Big5
+  and single-byte encodings.
 
 Tools
   tools/golden builds against the crates chardetng 1.0.0 (Apache-2.0 OR MIT)

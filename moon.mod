@@ -6,7 +6,7 @@ readme = "README.mbt.md"
 
 repository = "https://github.com/Fyx-9998/mbchardet"
 
-license = "Apache-2.0 OR MIT"
+license = "(Apache-2.0 OR MIT) AND BSD-3-Clause"
 
 keywords = [ "encoding", "charset", "detection", "chardet", "bom" ]
 

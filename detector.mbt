@@ -1,6 +1,6 @@
 // The detector of chardetng 1.0.0 (EncodingDetector in src/lib.rs,
-// Apache-2.0 OR MIT, Copyright Mozilla Foundation), ported without its CJK
-// candidates so far. See NOTICE.
+// Apache-2.0 OR MIT, Copyright Mozilla Foundation), ported so far without
+// the Japanese and Korean candidates and without the final guess. See NOTICE.
 
 ///|
 priv enum Inner {
@@ -11,6 +11,8 @@ priv enum Inner {
   ArabicFrench(ArabicFrenchCandidate)
   Logical(LogicalCandidate)
   Visual(VisualCandidate)
+  Gbk(GbkCandidate)
+  Big5(Big5Candidate)
 }
 
 ///|
@@ -22,7 +24,7 @@ fn Inner::feed_single_byte(self : Inner, buffer : BytesView) -> Int64? {
     ArabicFrench(c) => c.feed(buffer)
     Logical(c) => c.feed(buffer)
     Visual(c) => c.feed(buffer)
-    Utf8Check(_) => panic()
+    Utf8Check(_) | Gbk(_) | Big5(_) => panic()
   }
 }
 
@@ -30,14 +32,19 @@ fn Inner::feed_single_byte(self : Inner, buffer : BytesView) -> Int64? {
 /// The score change from `buffer`, or `None` if `buffer` rules the encoding
 /// out.
 fn Inner::feed(self : Inner, buffer : BytesView, last : Bool) -> Int64? {
-  if self is Utf8Check(validator) {
-    if !validator.feed(buffer) {
-      return None
+  match self {
+    Utf8Check(validator) => {
+      if !validator.feed(buffer) {
+        return None
+      }
+      if last && validator.finish() is Invalid(_) {
+        return None
+      }
+      return Some(0)
     }
-    if last && validator.finish() is Invalid(_) {
-      return None
-    }
-    return Some(0)
+    Gbk(c) => return c.feed(buffer, last)
+    Big5(c) => return c.feed(buffer, last)
+    _ => ()
   }
   guard self.feed_single_byte(buffer) is Some(score) else { return None }
   if !last {
@@ -111,7 +118,7 @@ fn Candidate::generic_score(self : Candidate) -> Int64? {
     ArabicFrench(c) => c.longest_word
     Logical(c) => c.longest_word
     Visual(c) => c.longest_word
-    Utf8Check(_) | Latin(_) => 2
+    Utf8Check(_) | Latin(_) | Gbk(_) | Big5(_) => 2
   }
   if longest_word < 2 {
     None
@@ -127,8 +134,8 @@ fn Candidate::generic_score(self : Candidate) -> Int64? {
 /// This is a port of the detector of chardetng 1.0.0
 /// (<https://github.com/hsivonen/chardetng>), the detector Firefox uses for
 /// unlabeled legacy content. So far it contains chardetng's candidates for
-/// UTF-8 and the single-byte encodings; the CJK candidates, and with them a
-/// final guess, are not ported yet.
+/// UTF-8, GBK, Big5 and the single-byte encodings; the Japanese and Korean
+/// candidates, and with them a final guess, are not ported yet.
 struct Detector {
   candidates : Array[Candidate]
   mut non_ascii_seen : Int64
@@ -142,12 +149,17 @@ struct Detector {
 ///|
 /// A detector that has seen no input yet.
 pub fn Detector::new() -> Detector {
-  // chardetng's candidate order, without the CJK candidates. When two
-  // candidates report the same encoding, `score` uses the first.
-  let candidates = [Candidate::new(Utf8Check(Utf8Validator::new()), Utf8)]
+  // chardetng's candidate order, without the Japanese and Korean
+  // candidates. When two candidates report the same encoding, `score` uses
+  // the first.
+  let candidates = [
+    Candidate::new(Utf8Check(Utf8Validator::new()), Utf8),
+    Candidate::single_byte(ISO_8859_8_INDEX),
+    Candidate::new(Gbk(GbkCandidate::new()), Gbk),
+    Candidate::new(Big5(Big5Candidate::new()), Big5),
+  ]
   for
     index in [
-      ISO_8859_8_INDEX,
       WINDOWS_1252_INDEX,
       WINDOWS_1251_INDEX,
       WINDOWS_1250_INDEX,

@@ -5,7 +5,8 @@
 Downloads the per-language sentence exports of Tatoeba (https://tatoeba.org,
 CC BY 2.0 FR) for the languages below into CACHE_DIR, unless they are
 already there. For each language it picks two texts that the language's
-main legacy encoding can represent:
+main legacy encoding can represent (for simplified Chinese, texts that GBK
+can represent and Big5 cannot):
 
 - medium: one sentence of 31 to 80 characters;
 - long: sentences of 20 to 120 characters joined with spaces until the text
@@ -73,6 +74,10 @@ LANGUAGES = [
     ("et", "est", "cp1257"),
     ("vi", "vie", "cp1258"),
     ("th", "tha", "cp874"),
+    # Simplified Chinese: text GBK can represent and Big5 cannot.
+    ("zh", "cmn", "gbk"),
+    ("zh-Hant", "cmn", "big5"),
+    ("yue", "yue", "big5hkscs"),
 ]
 
 # Combining marks windows-1258 keeps separate from the base letter.
@@ -140,7 +145,7 @@ def candidates(path, code, lang, codec):
             form = romanian_cedilla(text) if lang == "ro" else text
             if lang == "vi":
                 form = vietnamese_1258(text)
-            if not encodable(form, codec):
+            if not encodable(form, codec) or (lang == "zh" and encodable(form, "big5")):
                 continue
             key = hashlib.sha256(f"{code}:{sentence_id}".encode()).hexdigest()
             rows.append((key, sentence_id, text))

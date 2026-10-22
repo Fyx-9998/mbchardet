@@ -1,8 +1,14 @@
 ///|
 /// The single-byte encodings `Detector` scores.
 fn single_byte_encodings() -> Array[@mbchardet.Encoding] {
-  let unicode = [@mbchardet.Utf8, @mbchardet.Utf16Be, @mbchardet.Utf16Le]
-  @mbchardet.Encoding::all().filter(e => !unicode.contains(e))
+  let multi_byte = [
+    @mbchardet.Utf8,
+    @mbchardet.Utf16Be,
+    @mbchardet.Utf16Le,
+    @mbchardet.Gbk,
+    @mbchardet.Big5,
+  ]
+  @mbchardet.Encoding::all().filter(e => !multi_byte.contains(e))
 }
 
 ///|
