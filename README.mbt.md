@@ -8,7 +8,9 @@ they can be decoded correctly instead of turning into mojibake.
 
 Early development. The detector, ported from chardetng 1.0.0, scores the
 encodings chardetng detects and guesses between them as chardetng does. The
-prescan of the HTML Standard finds the encoding a document declares.
+prescan of the HTML Standard finds the encoding a document declares, and
+`sniff_html` and `sniff_xml` find the encoding of a whole document in the
+order the HTML Standard and XML 1.0 give.
 
 Implemented:
 
@@ -66,10 +68,24 @@ Implemented:
   (of the jsdom project) for 471,093 variations of 131 short documents,
   except in two cases where html-encoding-sniffer departs from the standard
   (see [Testing](#testing)).
+- `sniff_html(bytes)` and `sniff_xml(bytes)`: the encoding of a whole
+  document, with the step that decided (`Source`). `sniff_html` follows the
+  [encoding sniffing algorithm](https://html.spec.whatwg.org/multipage/parsing.html#encoding-sniffing-algorithm)
+  of the HTML Standard: a byte order mark, then the encoding label from the
+  transport layer (`charset`), then the prescan, then the detector's guess.
+  `sniff_xml` takes a byte order mark, then `charset`, in the order of
+  [RFC 7303](https://www.rfc-editor.org/rfc/rfc7303#section-3.2), then the
+  XML declaration as [XML 1.0](https://www.w3.org/TR/2008/REC-xml-20081126/)
+  defines it, and UTF-8 otherwise. A test compares how `sniff_xml` reads
+  XML declarations with expat, the XML parser of Firefox, on 61,152
+  variations of 34 short documents, except where expat accepts version
+  numbers that XML 1.0 does not (see [Testing](#testing)).
 - `mbchardet`, a command-line tool (`cmd/main`): for each file, the
   encoding its byte order mark names if it has one, otherwise the
-  detector's guess, with options for the top-level domain, for denying
-  UTF-8 or ISO-2022-JP, and for listing the scores. See
+  detector's guess, and which of them decided. `--charset` passes a label
+  from the transport layer, and `--html` and `--xml` find the encoding as
+  `sniff_html` and `sniff_xml` do. Other options set the top-level domain,
+  deny UTF-8 or ISO-2022-JP, and list the scores. See
   [Command line](#command-line).
 - `Encoding`: the 40 encodings of the Encoding Standard, with `name()`
   giving the canonical name (`"UTF-8"`, `"windows-1251"`, ...) and
@@ -85,11 +101,6 @@ Implemented:
 
 Planned, not implemented yet:
 
-- The encoding sniffing algorithm of the
-  [HTML Standard](https://html.spec.whatwg.org/multipage/parsing.html#determining-the-character-encoding),
-  which puts these steps together: byte order mark, transport-layer label,
-  prescan, then the detector, reporting which step decided; and the same
-  for XML documents.
 - Conversion to UTF-8 that refuses input it cannot convert without loss,
   in the library and the command-line tool, and a browser demo.
 
@@ -294,13 +305,113 @@ document whose markup reads as ASCII is not in UTF-16. A declaration can
 also be wrong; the prescan reports what the document says, not whether its
 bytes agree.
 
+## Sniffing documents
+
+`sniff_html` finds the encoding of an HTML document as a browser does,
+trying each step of the HTML Standard in turn, and reports the step that
+decided. The label from the transport layer, such as the `charset` of an
+HTTP `Content-Type` header, overrides what the document declares, and a
+byte order mark overrides both:
+
+```mbt check
+///|
+test {
+  let page = b"<meta charset=\"gb2312\"><title>"
+  assert_eq(@mbchardet.sniff_html(page[:]), { encoding: Gbk, source: Prescan, })
+  assert_eq(@mbchardet.sniff_html(page[:], charset="Shift_JIS"), {
+    encoding: ShiftJis,
+    source: TransportLayer,
+  })
+  let marked = b"\xEF\xBB\xBF<meta charset=\"gb2312\">"
+  assert_eq(@mbchardet.sniff_html(marked[:], charset="Shift_JIS"), {
+    encoding: Utf8,
+    source: ByteOrderMark,
+  })
+}
+```
+
+Pass the value of the `charset` parameter, not the whole header: a string
+that is no label of the Encoding Standard counts as none. Without a byte
+order mark, a label or a declaration, the detector guesses from all of the
+bytes, with the options of `Detector`. To decide as a browser does for a
+page from the Web, pass `allow_utf8=false` and `allow_iso_2022_jp=false`,
+as chardetng's documentation advises:
+
+```mbt check
+///|
+test {
+  // "Keď som ju uvidel, zamrelo mi srdce.", Tatoeba sentence 9935594
+  // (CC BY 2.0 FR), in windows-1250.
+  let page = b"<p>Ke\xEF som ju uvidel, zamrelo mi srdce.</p>"
+  assert_eq(@mbchardet.sniff_html(page[:], tld="sk"), {
+    encoding: Windows1250,
+    source: Detection,
+  })
+  let german = b"<p>Gr\xC3\xBC\xC3\x9Fe</p>" // "Grüße" in UTF-8
+  assert_eq(@mbchardet.sniff_html(german[:]).encoding, @mbchardet.Utf8)
+  let web = @mbchardet.sniff_html(
+    german[:],
+    allow_utf8=false,
+    allow_iso_2022_jp=false,
+  )
+  assert_eq(web.encoding, @mbchardet.Windows1252)
+}
+```
+
+The HTML Standard calls the encoding *certain* when a byte order mark or
+the transport layer gave it, and *tentative* otherwise: a parser that
+finds a `<meta>` declaring another encoding later in the document may then
+start over with that one. `sniff_html` leaves out the steps of the
+standard that depend on the browser: an encoding the user chose, the
+encoding of the document around a frame, and the one a page had when it
+was last visited.
+
+`sniff_xml` does the same for XML. RFC 7303 puts a byte order mark first
+and the transport layer second, and XML 1.0 the XML declaration third.
+XML is not guessed: without a declaration the encoding is UTF-8. The
+declaration has to come at the very start of the document and follow the
+grammar of XML 1.0, and its label is looked up in the Encoding Standard,
+as for HTML:
+
+```mbt check
+///|
+test {
+  let feed = b"<?xml version=\"1.0\" encoding=\"windows-1251\"?>\n<rss>"
+  assert_eq(@mbchardet.sniff_xml(feed[:]), {
+    encoding: Windows1251,
+    source: XmlDeclaration,
+  })
+  assert_eq(
+    @mbchardet.sniff_xml(feed[:], charset="koi8-r").encoding,
+    @mbchardet.Koi8R,
+  )
+  assert_eq(@mbchardet.sniff_xml(b"<rss>"[:]), {
+    encoding: Utf8,
+    source: Default,
+  })
+  // XML 1.0 puts the version first, so this declaration does not count.
+  // The prescan of HTML is not as strict.
+  let reversed = b"<?xml encoding=\"windows-1251\" version=\"1.0\"?>"
+  assert_eq(@mbchardet.sniff_xml(reversed[:]).source, @mbchardet.Default)
+  assert_eq(@mbchardet.prescan_html(reversed[:]), Some(@mbchardet.Windows1251))
+}
+```
+
+As for HTML, a declaration of UTF-16 that reads as ASCII gives UTF-8. A
+document that starts with `<?` in UTF-16 without a byte order mark is
+UTF-16LE or UTF-16BE, as appendix F of XML 1.0 detects. XML 1.0 also
+detects UTF-32 and EBCDIC, which the Encoding Standard does not define;
+`sniff_xml` gives such documents UTF-8.
+
 ## Command line
 
 `cmd/main` is the `mbchardet` command. `moon run cmd/main --` followed by
 its arguments runs it, on any backend (`--target native` builds a native
 executable). Here `sk.txt` holds the Slovak sentence above in windows-1250,
 `zh.txt` Chinese text in GBK, `bom.csv` a CSV file that starts with a
-UTF-8 byte order mark, and `ascii.txt` plain ASCII:
+UTF-8 byte order mark, `ascii.txt` plain ASCII, `page.html` a page with
+`<meta charset="Shift_JIS">`, and `feed.xml` a feed that starts with
+`<?xml version="1.0" encoding="windows-1251"?>`:
 
 ```
 $ moon run cmd/main -- sk.txt zh.txt bom.csv ascii.txt
@@ -310,12 +421,32 @@ bom.csv: UTF-8 (byte order mark)
 ascii.txt: UTF-8 (ASCII only)
 $ moon run cmd/main -- --tld sk sk.txt
 sk.txt: windows-1250
+$ moon run cmd/main -- --html page.html
+page.html: Shift_JIS (declared)
+$ moon run cmd/main -- --xml feed.xml
+feed.xml: windows-1251 (declared)
+$ moon run cmd/main -- --xml --charset koi8-r feed.xml
+feed.xml: KOI8-R (--charset)
 ```
 
-Each file gets a line with its encoding, followed by `(byte order mark)`
-when the mark decided, `(ASCII only)` when every byte is ASCII, so that any
-encoding the guess could be reads the file the same way, or `(empty)`.
+Each file gets a line with its encoding, followed by the step that decided
+it: `(byte order mark)`, `(--charset)`, `(declared)` when the document
+declares it, with `--html` or `--xml`, or `(default)` for XML that does
+not. Without a note, the detector guessed; `(ASCII only)` then says that
+every byte is ASCII, so that any encoding the guess could be reads the
+file the same way, and `(empty)` that the file is empty.
 
+- `--html`: find the encoding as `sniff_html` does: after a byte order
+  mark and `--charset`, the encoding that a `<meta>` or an XML declaration
+  in the first 1024 bytes declares, otherwise the guess.
+- `--xml`: find the encoding as `sniff_xml` does: after a byte order mark
+  and `--charset`, the encoding the XML declaration declares, otherwise
+  UTF-8. Nothing is guessed, so the options of the detector cannot be
+  given with it.
+- `--charset LABEL`: the encoding label the files came with, such as the
+  `charset` of an HTTP `Content-Type` header. It decides unless a file
+  starts with a byte order mark. A string that is no label of the Encoding
+  Standard is an error.
 - `--tld LABEL`: the top-level domain the files came from, such as `jp`,
   in Punycode if internationalized (`xn--p1ai`); case does not matter.
 - `--deny-utf8`: never guess UTF-8. chardetng's documentation asks browsers
@@ -326,15 +457,15 @@ encoding the guess could be reads the file the same way, or `(empty)`.
 
 Errors go to standard error, or to standard output with wasm-gc, which has
 no standard error in MoonBit. A file that cannot be read makes the exit
-status 1, and an invalid command line makes it 2; unknown options and a
-missing file name also print the help text.
+status 1, and an invalid command line makes it 2; unknown options, options
+that do not go together and a missing file name also print the help text.
 
 ## Testing
 
 `moon test` runs unit tests, tests of the command-line tool, and golden
-tests against data that chardetng, encoding_rs and html-encoding-sniffer
-themselves produced. The data and the tables are generated, and CI checks
-that regenerating them gives the committed files:
+tests against data that chardetng, encoding_rs, html-encoding-sniffer and
+expat themselves produced. The data and the tables are generated, and CI
+checks that regenerating them gives the committed files:
 
 - `tools/gen_corpus.py` picks sentences from Tatoeba into `tools/corpus.tsv`.
 - `tools/golden` (Rust, with chardetng 1.0.0 and encoding_rs 0.8.42 pinned
@@ -364,6 +495,16 @@ that regenerating them gives the committed files:
   attribute count after a `charset` attribute whose label names no
   encoding. The first correction changes 63 of the answers, the second
   none; `prescan_test.mbt` tests both cases against the standard.
+- `tools/gen_xml_data.py` (Python, with the `pyexpat` module of its
+  standard library) writes `xml_data_test.mbt`: the encoding that
+  `sniff_xml` should find in 61,152 variations of 34 short documents that
+  start with an XML declaration or something close to one, varied as for
+  `tools/sniffer`, following what expat, the XML parser of Firefox, reads
+  in their declarations. expat does not check the version number and
+  accepts, for example, `version="2.0"`, which XML 1.0 does not allow; the
+  tool counts such a declaration as none, which changes 1,082 of the
+  answers. The committed file was made with expat 2.7.1 and is the same
+  with expat 2.7.4; CI makes it again with the Python of its runner.
 
 ```
 python tools/gen_corpus.py CACHE_DIR tools/corpus.tsv
@@ -373,6 +514,7 @@ python tools/gen_index.py WHATWG_DIR cjk_index_data.mbt
 python tools/gen_labels.py WHATWG_DIR/encodings.json label_data.mbt
 npm ci --prefix tools/sniffer
 node tools/sniffer/main.mjs HTML5LIB_DIR WPT_DIR prescan_data_test.mbt
+python tools/gen_xml_data.py WHATWG_DIR/encodings.json xml_data_test.mbt
 moon fmt
 ```
 

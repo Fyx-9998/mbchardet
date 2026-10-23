@@ -6,6 +6,11 @@ import {
 
 import {
   "moonbitlang/core/buffer",
+  "moonbitlang/core/debug",
   "moonbitlang/core/encoding/utf8",
   "moonbitlang/core/string",
 } for "test"
+
+import {
+  "moonbitlang/core/encoding/utf8",
+} for "wbtest"

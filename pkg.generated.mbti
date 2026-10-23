@@ -12,6 +12,10 @@ pub fn prescan_html(BytesView, limit? : Int32) -> Encoding?
 
 pub fn sniff_bom(BytesView) -> (Encoding, Int32)?
 
+pub fn sniff_html(BytesView, charset? : StringView, tld? : String, allow_utf8? : Bool, allow_iso_2022_jp? : Bool) -> Sniffed
+
+pub fn sniff_xml(BytesView, charset? : StringView) -> Sniffed
+
 pub fn tld_may_affect_guess(String) -> Bool
 
 // Errors
@@ -71,6 +75,20 @@ pub fn Encoding::from_label(StringView) -> Self?
 pub fn Encoding::name(Self) -> String
 pub fn Encoding::to_string(Self) -> String
 pub impl Show for Encoding
+
+pub(all) struct Sniffed {
+  encoding : Encoding
+  source : Source
+} derive(Eq, @debug.Debug)
+
+pub(all) enum Source {
+  ByteOrderMark
+  TransportLayer
+  Prescan
+  XmlDeclaration
+  Detection
+  Default
+} derive(Eq, @debug.Debug)
 
 pub(all) struct Utf8Error {
   valid_up_to : Int64

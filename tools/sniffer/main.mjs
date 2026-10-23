@@ -185,7 +185,7 @@ function sniff(sniffer, bytes) {
 // Every prefix of `seed`, from the empty one; `seed` without each byte; with
 // each byte replaced by each byte of ALPHABET; and with each byte of
 // ALPHABET inserted before each byte and at the end. The same order as
-// prescan_golden_test.mbt.
+// mutation_test.mbt.
 function mutations(seed) {
   const out = [];
   for (let n = 0; n <= seed.length; n++) {

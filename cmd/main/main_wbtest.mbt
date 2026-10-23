@@ -2,6 +2,8 @@
 fn defaults() -> Settings {
   {
     files: [],
+    kind: Text,
+    charset: None,
     tld: None,
     allow_utf8: true,
     allow_iso_2022_jp: true,
@@ -163,4 +165,112 @@ test "equal scores keep the order of Encoding::all()" {
   assert_true(expected.length() > 1)
   assert_eq(lines[1:1 + expected.length()].to_owned(), expected)
   assert_eq(lines.length(), expected.length() + 2)
+}
+
+///|
+test "parse_args with --html, --xml and --charset" {
+  let settings = parse_args(argv=["--html", "--charset", "Shift_JIS", "a.html"])
+  assert_true(settings.kind is Html)
+  assert_eq(settings.charset, Some("Shift_JIS"))
+  assert_true(
+    parse_args(argv=["--xml", "--charset", "gbk", "a.xml"]).kind is Xml,
+  )
+  assert_true(parse_args(argv=["a.txt"]).kind is Text)
+  assert_eq(parse_args(argv=["a.txt"]).charset, None)
+}
+
+///|
+test "parse_args rejects options that do not go together" {
+  // --xml does not guess, so the options of the detector do not apply.
+  for
+    argv in [
+      ["--html", "--xml", "a"],
+      ["--xml", "--tld", "jp", "a"],
+      ["--xml", "--deny-utf8", "a"],
+      ["--xml", "--deny-iso-2022-jp", "a"],
+      ["--xml", "--scores", "a"],
+    ] {
+    try parse_args(argv~) catch {
+      error =>
+        assert_true(
+          error.to_string().has_prefix("error: conflicting arguments: "),
+        )
+    } noraise {
+      _ => fail("\{argv.join(" ")} was accepted")
+    }
+  }
+}
+
+///|
+test "parse_args rejects a charset that is no label" {
+  for label in ["bogus", "", "text/html; charset=utf-8"] {
+    try parse_args(argv=["--charset", label, "a.txt"]) catch {
+      error =>
+        assert_true(
+          error.to_string().has_prefix("error: --charset takes a label"),
+        )
+    } noraise {
+      _ => fail("--charset \{label} was accepted")
+    }
+  }
+}
+
+///|
+test "--charset decides unless there is a byte order mark" {
+  let settings = { ..defaults(), charset: Some("windows-1250"), }
+  assert_eq(report("sk.txt", slovak, settings), [
+    "sk.txt: windows-1250 (--charset)",
+  ])
+  assert_eq(report("a.csv", b"\xEF\xBB\xBFname", settings), [
+    "a.csv: UTF-8 (byte order mark)",
+  ])
+  // Scores are not listed: the detector is not run.
+  assert_eq(report("sk.txt", slovak, { ..settings, scores: true, }), [
+    "sk.txt: windows-1250 (--charset)",
+  ])
+}
+
+///|
+test "HTML files" {
+  let html = { ..defaults(), kind: Html, }
+  let declared = b"<meta charset=\"koi8-r\"><p>"
+  assert_eq(report("a.html", declared, html), ["a.html: KOI8-R (declared)"])
+  assert_eq(report("a.html", declared, { ..html, charset: Some("gbk"), }), [
+    "a.html: GBK (--charset)",
+  ])
+  assert_eq(report("a.html", declared, { ..html, scores: true, }), [
+    "a.html: KOI8-R (declared)",
+  ])
+  // Without --html, a <meta> declares nothing.
+  assert_eq(report("a.txt", declared, defaults()), ["a.txt: UTF-8 (ASCII only)"])
+  // Without a declaration, the guess, as for any text.
+  let page = b"<p>" + slovak + b"</p>"
+  assert_eq(report("sk.html", page, html), ["sk.html: ISO-8859-4"])
+  assert_eq(report("sk.html", page, { ..html, tld: Some("sk"), }), [
+    "sk.html: windows-1250",
+  ])
+  assert_eq(
+    report("sk.html", page, { ..html, scores: true, }),
+    report("sk.html", page, { ..defaults(), scores: true, }),
+  )
+  assert_eq(report("a.html", b"<p>plain</p>", html), [
+    "a.html: UTF-8 (ASCII only)",
+  ])
+  assert_eq(report("e.html", b"", html), ["e.html: UTF-8 (empty)"])
+}
+
+///|
+test "XML files" {
+  let xml = { ..defaults(), kind: Xml, }
+  let feed = b"<?xml version=\"1.0\" encoding=\"windows-1251\"?><rss>"
+  assert_eq(report("feed.xml", feed, xml), ["feed.xml: windows-1251 (declared)"])
+  assert_eq(report("feed.xml", feed, { ..xml, charset: Some("koi8-r"), }), [
+    "feed.xml: KOI8-R (--charset)",
+  ])
+  assert_eq(report("feed.xml", b"\xEF\xBB\xBF" + feed, xml), [
+    "feed.xml: UTF-8 (byte order mark)",
+  ])
+  // Without a declaration, UTF-8, whatever the bytes: XML is not guessed.
+  assert_eq(report("sk.xml", slovak, xml), ["sk.xml: UTF-8 (default)"])
+  assert_eq(report("e.xml", b"", xml), ["e.xml: UTF-8 (default)"])
 }

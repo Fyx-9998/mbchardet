@@ -1,9 +1,22 @@
-// The mbchardet command: guesses the encoding of files.
+// The mbchardet command: finds the encoding of files.
+
+///|
+/// What the files are, which decides the steps that find their encoding.
+priv enum Kind {
+  /// Any text: a byte order mark, `--charset`, then the guess.
+  Text
+  /// HTML: `sniff_html`.
+  Html
+  /// XML: `sniff_xml`.
+  Xml
+}
 
 ///|
 /// What the command line asks for.
 priv struct Settings {
   files : Array[String]
+  kind : Kind
+  charset : String?
   tld : String?
   allow_utf8 : Bool
   allow_iso_2022_jp : Bool
@@ -26,8 +39,18 @@ impl Show for Usage with fn output(self, logger) {
 fn command() -> @argparse.Command {
   @argparse.Command(
     "mbchardet",
-    about="Guesses the character encoding of each file: a byte order mark if there is one, else the guess of chardetng, the detector of Firefox.",
+    about="Finds the character encoding of each file: a byte order mark if there is one, else the guess of chardetng, the detector of Firefox. With --html or --xml, also what the document declares.",
     flags=[
+      @argparse.FlagArg(
+        "html",
+        about="treat the files as HTML, as browsers do: after a byte order mark and --charset, the encoding a <meta> or an XML declaration in the first 1024 bytes declares, then the guess",
+        conflicts_with=["xml"],
+      ),
+      @argparse.FlagArg(
+        "xml",
+        about="treat the files as XML: after a byte order mark and --charset, the encoding the XML declaration declares, else UTF-8, without guessing",
+        conflicts_with=["tld", "deny-utf8", "deny-iso-2022-jp", "scores"],
+      ),
       @argparse.FlagArg(
         "deny-utf8",
         about="never guess UTF-8, as browsers do for HTML from the Web",
@@ -39,6 +62,10 @@ fn command() -> @argparse.Command {
       ),
     ],
     options=[
+      @argparse.OptionArg(
+        "charset",
+        about="the encoding label the files came with, such as the charset of an HTTP Content-Type header; only a byte order mark overrides it",
+      ),
       @argparse.OptionArg(
         "tld",
         about="the top-level domain the files came from, such as jp",
@@ -67,6 +94,17 @@ fn check_tld(tld : String) -> String raise Usage {
 }
 
 ///|
+/// `label` if it is a label of the Encoding Standard.
+fn check_charset(label : String) -> String raise Usage {
+  if @mbchardet.Encoding::from_label(label) is None {
+    raise Usage(
+      "error: --charset takes a label of the Encoding Standard, such as shift_jis or latin1; got \"\{label}\"",
+    )
+  }
+  label
+}
+
+///|
 /// The settings of the command line `argv`, without the program name.
 /// Without `argv`, the command line of this process; `--help` then prints
 /// the help and exits.
@@ -76,8 +114,21 @@ fn parse_args(argv? : ArrayView[String]) -> Settings raise {
     Some([.., last]) => Some(check_tld(last))
     _ => None
   }
+  let charset = match matches.values.get("charset") {
+    Some([.., last]) => Some(check_charset(last))
+    _ => None
+  }
+  let kind = if matches.flags.get_or_default("html", false) {
+    Html
+  } else if matches.flags.get_or_default("xml", false) {
+    Xml
+  } else {
+    Text
+  }
   {
     files: matches.values.get_or_default("files", []),
+    kind,
+    charset,
     tld,
     allow_utf8: !matches.flags.get_or_default("deny-utf8", false),
     allow_iso_2022_jp: !matches.flags.get_or_default("deny-iso-2022-jp", false),
@@ -118,26 +169,79 @@ fn score_lines(detector : @mbchardet.Detector) -> Array[String] {
 }
 
 ///|
-/// The lines printed for the file `path` that holds `data`.
-fn report(path : String, data : Bytes, settings : Settings) -> Array[String] {
-  if @mbchardet.sniff_bom(data[:]) is Some((encoding, _)) {
-    return ["\{path}: \{encoding} (byte order mark)"]
-  }
+/// A detector that has been fed `data`, created as `settings` say.
+fn detector_for(data : Bytes, settings : Settings) -> @mbchardet.Detector {
   let detector = @mbchardet.Detector::new(
     allow_iso_2022_jp=settings.allow_iso_2022_jp,
   )
-  let non_ascii = detector.feed(data[:], last=true)
-  let guess = detector.guess(tld?=settings.tld, allow_utf8=settings.allow_utf8)
-  let note = if data.length() == 0 {
-    " (empty)"
-  } else if !non_ascii && guess != Iso2022Jp {
-    // Every encoding guessed then reads ASCII the same way.
-    " (ASCII only)"
-  } else {
-    ""
+  detector.feed(data[:], last=true) |> ignore
+  detector
+}
+
+///|
+/// The encoding of `data` and the step that decided, for any text: a byte
+/// order mark, then `--charset`, then the guess. With the guess, the
+/// detector that made it.
+fn sniff_text(
+  data : Bytes,
+  settings : Settings,
+) -> (@mbchardet.Sniffed, @mbchardet.Detector?) {
+  if @mbchardet.sniff_bom(data[:]) is Some((encoding, _)) {
+    return ({ encoding, source: ByteOrderMark, }, None)
   }
-  let lines = ["\{path}: \{guess}\{note}"]
-  if settings.scores {
+  if settings.charset is Some(label) &&
+    @mbchardet.Encoding::from_label(label) is Some(encoding) {
+    return ({ encoding, source: TransportLayer, }, None)
+  }
+  let detector = detector_for(data, settings)
+  let encoding = detector.guess(
+    tld?=settings.tld,
+    allow_utf8=settings.allow_utf8,
+  )
+  ({ encoding, source: Detection, }, Some(detector))
+}
+
+///|
+/// The lines printed for the file `path` that holds `data`.
+fn report(path : String, data : Bytes, settings : Settings) -> Array[String] {
+  let charset = settings.charset.map(label => label[:])
+  let (sniffed, detector) = match settings.kind {
+    Text => sniff_text(data, settings)
+    Html => {
+      let sniffed = @mbchardet.sniff_html(
+        data[:],
+        charset?,
+        tld?=settings.tld,
+        allow_utf8=settings.allow_utf8,
+        allow_iso_2022_jp=settings.allow_iso_2022_jp,
+      )
+      (sniffed, None)
+    }
+    Xml => (@mbchardet.sniff_xml(data[:], charset?), None)
+  }
+  let { encoding, source, } = sniffed
+  let note = match source {
+    ByteOrderMark => " (byte order mark)"
+    TransportLayer => " (--charset)"
+    Prescan | XmlDeclaration => " (declared)"
+    Default => " (default)"
+    Detection =>
+      if data.length() == 0 {
+        " (empty)"
+      } else if data.iter().all(b => b < 0x80) && encoding != Iso2022Jp {
+        // Every encoding guessed then reads ASCII the same way.
+        " (ASCII only)"
+      } else {
+        ""
+      }
+  }
+  let lines = ["\{path}: \{encoding}\{note}"]
+  if settings.scores && source == Detection {
+    // sniff_html does not hand out its detector, so --html feeds another.
+    let detector = match detector {
+      Some(detector) => detector
+      None => detector_for(data, settings)
+    }
     lines.append(score_lines(detector))
   }
   lines

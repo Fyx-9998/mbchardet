@@ -102,6 +102,27 @@ WHATWG HTML Standard
   licensed under CC BY 4.0; its portions incorporated into source code are
   licensed under the BSD 3-Clause License.
 
+  sniff.mbt implements the "encoding sniffing algorithm" of the same
+  section, as published on 2026-10-22, apart from the steps that depend on
+  the browser.
+
+Extensible Markup Language (XML) 1.0 (Fifth Edition), W3C Recommendation
+26 November 2008
+  https://www.w3.org/TR/2008/REC-xml-20081126/
+  Copyright © 2008 W3C® (MIT, ERCIM, Keio), All Rights Reserved.
+
+  xml_declaration.mbt implements the XML declaration (productions 3, 23 to
+  26, 32, 80 and 81) and quotes these productions in comments; sniff.mbt
+  follows section 4.3.3 and appendix F. No other text is copied. The
+  specification is used under the W3C document use rules
+  (https://www.w3.org/Consortium/Legal/copyright-documents).
+
+RFC 7303, XML Media Types
+  https://www.rfc-editor.org/rfc/rfc7303
+
+  sniff.mbt takes the order of the byte order mark and the charset
+  parameter from section 3.2. No text is copied.
+
 html5lib-tests
   https://github.com/html5lib/html5lib-tests
   Copyright (c) 2006-2013 James Graham, Geoffrey Sneddon, and other
@@ -148,5 +169,9 @@ Tools
   2024-2025 Exodus Movement), pinned in tools/sniffer/package-lock.json; to
   follow the HTML Standard where html-encoding-sniffer departs from it,
   tools/sniffer/main.mjs edits four of its lines in memory, which it quotes.
+  tools/gen_xml_data.py runs expat (MIT License, Copyright (c) 1998-2000
+  Thai Open Source Software Center Ltd and Clark Cooper, Copyright (c)
+  2001-2025 Expat maintainers) through the pyexpat module of Python;
+  xml_data_test.mbt holds answers that follow from what it reads.
   These packages are used to produce test data and are not part of the
   MoonBit module.
