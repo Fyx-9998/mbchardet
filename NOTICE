@@ -1,8 +1,14 @@
 mbchardet
 Copyright (c) 2026 Fyx-9998
 Licensed under the Apache License, Version 2.0 (LICENSE-APACHE) or the MIT
-license (LICENSE-MIT), at your option, except cjk_index_data.mbt, which is
-licensed under the BSD 3-Clause License (LICENSE-WHATWG); see below.
+license (LICENSE-MIT), at your option, except these files, which hold data
+of others under their licenses (see below):
+
+  - cjk_index_data.mbt, label_data.mbt and golden_labels_test.mbt: the BSD
+    3-Clause License of the WHATWG (LICENSE-WHATWG).
+  - prescan_data_test.mbt: the MIT License of html5lib-tests
+    (LICENSE-HTML5LIB-TESTS) and the BSD 3-Clause License of
+    web-platform-tests (LICENSE-WPT).
 
 This project ports the encoding detector chardetng.
 
@@ -67,7 +73,8 @@ encoding_rs 0.8.42
   ASCII byte belongs to it) follows the decoders of encoding_rs 0.8.42,
   which chardetng's candidates are fed with. No code is copied.
   golden_trace_wbtest.mbt holds hashes of how the encoding_rs decoders
-  answer, produced by tools/golden.
+  answer, and golden_labels_test.mbt the encoding that Encoding::for_label
+  of encoding_rs finds for each input, both produced by tools/golden.
 
 WHATWG Encoding Standard
   https://encoding.spec.whatwg.org/
@@ -77,8 +84,46 @@ WHATWG Encoding Standard
   index-gb18030-ranges.txt, index-big5.txt, index-jis0208.txt,
   index-jis0212.txt and index-euc-kr.txt of whatwg/encoding commit
   2c3853e461afd718be198772170d024e427aee21, without changes to the mappings.
-  The standard is licensed under CC BY 4.0; its portions incorporated into
-  source code are licensed under the BSD 3-Clause License, LICENSE-WHATWG.
+  label_data.mbt is written by tools/gen_labels.py from encodings.json of the
+  same commit, without changes to the labels, which golden_labels_test.mbt
+  also holds. The standard is licensed under CC BY 4.0; its portions
+  incorporated into source code are licensed under the BSD 3-Clause License,
+  LICENSE-WHATWG.
+
+WHATWG HTML Standard
+  https://html.spec.whatwg.org/
+  Copyright © WHATWG (Apple, Google, Mozilla, Microsoft).
+
+  prescan.mbt implements "prescan a byte stream to determine its encoding",
+  "get an attribute" and "get an XML encoding" (section 13.2.3.2) and "the
+  algorithm for extracting a character encoding from a meta element"
+  (section 2.5.3), as published on 2026-10-22, and names their steps in
+  comments. No text of the standard is copied otherwise. The standard is
+  licensed under CC BY 4.0; its portions incorporated into source code are
+  licensed under the BSD 3-Clause License.
+
+html5lib-tests
+  https://github.com/html5lib/html5lib-tests
+  Copyright (c) 2006-2013 James Graham, Geoffrey Sneddon, and other
+  contributors. Licensed under the MIT License, LICENSE-HTML5LIB-TESTS.
+
+  prescan_data_test.mbt holds the cases of encoding/tests1.dat and
+  encoding/tests2.dat of commit c777c408b61078ea2eb4acefc2535f54dbc8b28a
+  that are at most 1024 bytes long, without changes, with the encoding each
+  expects; those of at most 256 bytes are also seeds of the varied inputs
+  there.
+
+web-platform-tests
+  https://github.com/web-platform-tests/wpt
+  Copyright © web-platform-tests contributors. Licensed under the 3-Clause
+  BSD License, LICENSE-WPT.
+
+  prescan_data_test.mbt holds the documents of html/syntax/xmldecl/support
+  of commit cf0642a4d2a851574afd696f566987f84f92849f that xmldecl-1.html and
+  xmldecl-2.html load, without changes, with the encoding those pages
+  expect for each; not the copies with trailing text, nor the documents
+  served with an HTTP header. Those of at most 256 bytes are also seeds of
+  the varied inputs there.
 
 Tatoeba
   https://tatoeba.org
@@ -97,5 +142,11 @@ Tatoeba
 Tools
   tools/golden builds against the crates chardetng 1.0.0 (Apache-2.0 OR MIT)
   and encoding_rs 0.8.42 ((Apache-2.0 OR MIT) AND BSD-3-Clause), with the
-  versions of their dependencies pinned in tools/golden/Cargo.lock. They are
-  used to produce test data and are not part of the MoonBit module.
+  versions of their dependencies pinned in tools/golden/Cargo.lock.
+  tools/sniffer runs the npm packages html-encoding-sniffer 7.0.0 (MIT,
+  Copyright © Domenic Denicola) and @exodus/bytes 1.16.0 (MIT, Copyright (c)
+  2024-2025 Exodus Movement), pinned in tools/sniffer/package-lock.json; to
+  follow the HTML Standard where html-encoding-sniffer departs from it,
+  tools/sniffer/main.mjs edits four of its lines in memory, which it quotes.
+  These packages are used to produce test data and are not part of the
+  MoonBit module.

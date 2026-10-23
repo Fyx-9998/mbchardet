@@ -1,5 +1,7 @@
 // Compares Detector::score and Detector::guess with what chardetng 1.0.0
-// computes for the inputs in golden_data_test.mbt, written by tools/golden.
+// computes for the inputs in golden_data_test.mbt, and Encoding::from_label
+// with what encoding_rs 0.8.42 finds for those in golden_labels_test.mbt,
+// both written by tools/golden.
 
 ///|
 fn golden_encoding(name : String) -> @mbchardet.Encoding {
@@ -182,6 +184,21 @@ test "tld_may_affect_guess matches chardetng 1.0.0" {
   for entry in golden_tlds {
     if entry.0 is Some(tld) {
       assert_eq(@mbchardet.tld_may_affect_guess(tld), entry.1)
+    }
+  }
+}
+
+///|
+test "labels match encoding_rs 0.8.42" {
+  assert_eq(golden_labels.length(), 1271)
+  for case in golden_labels {
+    let (input, expected) = case
+    let found = @mbchardet.Encoding::from_label(input).map(e => e.name())
+    if found != expected {
+      let show = (name : String?) => name.unwrap_or("no encoding")
+      fail(
+        "label \{input.escape()}: \{show(found)}, encoding_rs \{show(expected)}",
+      )
     }
   }
 }

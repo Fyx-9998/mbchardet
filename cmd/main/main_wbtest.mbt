@@ -143,8 +143,11 @@ test "scores are listed highest first" {
   guard last.strip_prefix("  ruled out: ") is Some(ruled_out) else {
     fail("no list of encodings ruled out")
   }
-  // Every encoding but UTF-16 is listed once.
-  assert_eq(listed.length() + ruled_out.split(", ").count(), 26)
+  // Every encoding the detector scores is listed once.
+  assert_eq(
+    listed.length() + ruled_out.split(", ").count(),
+    @mbchardet.Detector::encodings().length(),
+  )
 }
 
 ///|
@@ -154,7 +157,7 @@ test "equal scores keep the order of Encoding::all()" {
   let detector = @mbchardet.Detector::new()
   detector.feed(data[:], last=true) |> ignore
   let expected = @mbchardet.Encoding::all()
-    .filter(e => !(e is (Utf16Be | Utf16Le)) && detector.score(e) is Some(_))
+    .filter(e => detector.score(e) is Some(_))
     .map(e => "  \{e.name()}\{" ".repeat(14 - e.name().length())}0")
   // ASCII scores 0 in every encoding it does not rule out.
   assert_true(expected.length() > 1)

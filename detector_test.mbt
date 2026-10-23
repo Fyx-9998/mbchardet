@@ -3,8 +3,6 @@
 fn single_byte_encodings() -> Array[@mbchardet.Encoding] {
   let multi_byte = [
     @mbchardet.Utf8,
-    @mbchardet.Utf16Be,
-    @mbchardet.Utf16Le,
     @mbchardet.Gbk,
     @mbchardet.Big5,
     @mbchardet.ShiftJis,
@@ -12,7 +10,7 @@ fn single_byte_encodings() -> Array[@mbchardet.Encoding] {
     @mbchardet.Iso2022Jp,
     @mbchardet.EucKr,
   ]
-  @mbchardet.Encoding::all().filter(e => !multi_byte.contains(e))
+  @mbchardet.Detector::encodings().filter(e => !multi_byte.contains(e))
 }
 
 ///|
@@ -41,6 +39,24 @@ test "a new detector" {
   assert_eq(detector.score(@mbchardet.Utf16Le), None)
   assert_eq(detector.score(@mbchardet.Utf16Be), None)
   assert_eq(detector.score(@mbchardet.Iso2022Jp), Some(0))
+}
+
+///|
+test "the encodings a detector scores" {
+  let scored = @mbchardet.Detector::encodings()
+  assert_eq(scored.length(), 26)
+  assert_eq(scored, @mbchardet.Encoding::all().filter(e => scored.contains(e)))
+  assert_false(scored.contains(@mbchardet.Utf16Le))
+  assert_false(scored.contains(@mbchardet.Gb18030))
+  // Input that leaves many encodings possible.
+  let detector = @mbchardet.Detector::new()
+  detector.feed(b"Zdravo \xE8\xE5\xEB\xE0 svete"[:], last=true) |> ignore
+  for encoding in @mbchardet.Encoding::all() {
+    if !scored.contains(encoding) {
+      assert_eq(detector.score(encoding), None)
+    }
+  }
+  assert_true(scored.iter().any(e => detector.score(e) is Some(_)))
 }
 
 ///|

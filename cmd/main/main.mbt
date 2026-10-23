@@ -91,17 +91,14 @@ fn parse_args(argv? : ArrayView[String]) -> Settings raise {
 fn score_lines(detector : @mbchardet.Detector) -> Array[String] {
   let scored = []
   let ruled_out = []
-  for i, encoding in @mbchardet.Encoding::all() {
-    // Only a byte order mark identifies UTF-16.
-    if encoding is (Utf16Be | Utf16Le) {
-      continue
-    }
+  for i, encoding in @mbchardet.Detector::encodings() {
     match detector.score(encoding) {
       Some(score) => scored.push((i, encoding, score))
       None => ruled_out.push(encoding.name())
     }
   }
-  // Equal scores keep the order of Encoding::all().
+  // Equal scores keep the order of Detector::encodings(), which is that of
+  // Encoding::all().
   scored.sort_by((a, b) => {
     let by_score = b.2.compare(a.2)
     if by_score != 0 {

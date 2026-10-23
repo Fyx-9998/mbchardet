@@ -3,7 +3,7 @@ name = "mbchardet-golden"
 version = "0.0.0"
 edition = "2021"
 publish = false
-description = "Writes golden_data_test.mbt: chardetng's scores and guesses for the test inputs"
+description = "Writes the golden test data: chardetng's scores and guesses, and what encoding_rs decodes and finds for labels"
 
 [dependencies]
 chardetng = { version = "=1.0.0", features = ["testing-only-no-semver-guarantees-do-not-use"] }

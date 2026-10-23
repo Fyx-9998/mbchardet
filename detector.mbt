@@ -352,8 +352,9 @@ pub fn Detector::feed(
 ///
 /// Returns `None` when the input has ruled `encoding` out: a byte that
 /// encoding does not use, invalid UTF-8, or, for encodings of non-Latin
-/// scripts, no word of at least two letters. Also `None` for UTF-16, which
-/// is only recognized by its byte order mark (see `sniff_bom`).
+/// scripts, no word of at least two letters. Also `None` for the encodings
+/// a detector does not score (see `Detector::encodings`), such as UTF-16,
+/// which is only recognized by its byte order mark (see `sniff_bom`).
 ///
 /// The scores are those chardetng's `find_score` computes for the same
 /// input fed in the same chunks.
@@ -364,6 +365,14 @@ pub fn Detector::score(self : Detector, encoding : Encoding) -> Int64? {
     }
   }
   None
+}
+
+///|
+/// The 26 encodings a detector scores, in the order of `Encoding::all()`:
+/// UTF-8 and the legacy encodings chardetng can guess.
+pub fn Detector::encodings() -> Array[Encoding] {
+  let scored = Detector::new().candidates.map(candidate => candidate.encoding)
+  Encoding::all().filter(encoding => scored.contains(encoding))
 }
 
 ///|

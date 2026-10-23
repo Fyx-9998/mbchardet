@@ -113,8 +113,8 @@ jobs:
             echo "::endgroup::"
           done
 
-  chardetng-data:
-    name: chardetng data
+  generated-data:
+    name: Generated data
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -124,8 +124,25 @@ jobs:
           curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
           echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
 
+      # html-encoding-sniffer 7.0.0 needs Node.js 22.13 or later.
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+
+      - name: Download the WHATWG Encoding Standard files
+        run: |
+          mkdir -p "$RUNNER_TEMP/whatwg"
+          for f in encodings.json index-gb18030.txt index-gb18030-ranges.txt \
+                   index-big5.txt index-jis0208.txt index-jis0212.txt index-euc-kr.txt; do
+            curl -fsSL -o "$RUNNER_TEMP/whatwg/$f" \
+              "https://raw.githubusercontent.com/whatwg/encoding/2c3853e461afd718be198772170d024e427aee21/$f"
+          done
+
       - name: Regenerate the golden data with chardetng 1.0.0 and encoding_rs 0.8.42
-        run: cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt
+        run: |
+          cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- \
+            tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt \
+            "$RUNNER_TEMP/whatwg/encodings.json" golden_labels_test.mbt
 
       - name: Regenerate the tables from chardetng's data.rs
         run: |
@@ -133,15 +150,29 @@ jobs:
             | python3 -c 'import json, sys; print(next(p["manifest_path"] for p in json.load(sys.stdin)["packages"] if p["name"] == "chardetng"))')
           python3 tools/gen_data.py "$(dirname "$manifest")/src" detector_data.mbt
 
-      - name: Regenerate the CJK tables from the WHATWG index files
+      - name: Regenerate the CJK tables and the labels from the WHATWG files
         run: |
-          mkdir -p "$RUNNER_TEMP/whatwg"
-          for f in index-gb18030.txt index-gb18030-ranges.txt index-big5.txt \
-                   index-jis0208.txt index-jis0212.txt index-euc-kr.txt; do
-            curl -fsSL -o "$RUNNER_TEMP/whatwg/$f" \
-              "https://raw.githubusercontent.com/whatwg/encoding/2c3853e461afd718be198772170d024e427aee21/$f"
-          done
           python3 tools/gen_index.py "$RUNNER_TEMP/whatwg" cjk_index_data.mbt
+          python3 tools/gen_labels.py "$RUNNER_TEMP/whatwg/encodings.json" label_data.mbt
+
+      - name: Regenerate the prescan data with html-encoding-sniffer 7.0.0
+        run: |
+          mkdir -p "$RUNNER_TEMP/html5lib" "$RUNNER_TEMP/wpt/support"
+          for f in tests1.dat tests2.dat; do
+            curl -fsSL -o "$RUNNER_TEMP/html5lib/$f" \
+              "https://raw.githubusercontent.com/html5lib/html5lib-tests/c777c408b61078ea2eb4acefc2535f54dbc8b28a/encoding/$f"
+          done
+          wpt=https://raw.githubusercontent.com/web-platform-tests/wpt/cf0642a4d2a851574afd696f566987f84f92849f/html/syntax/xmldecl
+          for f in xmldecl-1.html xmldecl-2.html; do
+            curl -fsSL -o "$RUNNER_TEMP/wpt/$f" "$wpt/$f"
+          done
+          # The documents the two pages load; main.mjs checks the hashes.
+          for f in $(grep -oh 'src="support/[^"]*\.htm"' "$RUNNER_TEMP"/wpt/xmldecl-*.html \
+                     | sed 's/^src="support\///; s/"$//' | grep -v -- '-trail\.htm$'); do
+            curl -fsSL -o "$RUNNER_TEMP/wpt/support/$f" "$wpt/support/$f"
+          done
+          npm ci --prefix tools/sniffer --ignore-scripts --no-audit --no-fund
+          node tools/sniffer/main.mjs "$RUNNER_TEMP/html5lib" "$RUNNER_TEMP/wpt" prescan_data_test.mbt
 
       - name: Format the generated files
         run: moon fmt
@@ -159,5 +190,8 @@ jobs:
           path: |
             golden_data_test.mbt
             golden_trace_wbtest.mbt
+            golden_labels_test.mbt
             detector_data.mbt
             cjk_index_data.mbt
+            label_data.mbt
+            prescan_data_test.mbt

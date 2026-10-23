@@ -1,0 +1,10 @@
+{
+  "name": "mbchardet-sniffer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Writes prescan_data_test.mbt: what html-encoding-sniffer finds for the prescan test inputs",
+  "type": "module",
+  "dependencies": {
+    "html-encoding-sniffer": "7.0.0"
+  }
+}

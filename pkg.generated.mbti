@@ -8,6 +8,8 @@ import {
 // Values
 pub fn check_utf8(BytesView) -> Utf8Status
 
+pub fn prescan_html(BytesView, limit? : Int32) -> Encoding?
+
 pub fn sniff_bom(BytesView) -> (Encoding, Int32)?
 
 pub fn tld_may_affect_guess(String) -> Bool
@@ -16,6 +18,7 @@ pub fn tld_may_affect_guess(String) -> Bool
 
 // Types and methods
 type Detector
+pub fn Detector::encodings() -> Array[Encoding]
 pub fn Detector::feed(Self, BytesView, last? : Bool) -> Bool
 pub fn Detector::guess(Self, tld? : String, allow_utf8? : Bool) -> Encoding
 pub fn Detector::new(allow_iso_2022_jp? : Bool) -> Self
@@ -50,8 +53,21 @@ pub(all) enum Encoding {
   Iso8859_13
   Koi8U
   Ibm866
+  Iso8859_3
+  Iso8859_8I
+  Iso8859_10
+  Iso8859_14
+  Iso8859_15
+  Iso8859_16
+  Koi8R
+  Macintosh
+  XMacCyrillic
+  Gb18030
+  Replacement
+  XUserDefined
 } derive(Eq, Hash, @debug.Debug)
 pub fn Encoding::all() -> Array[Self]
+pub fn Encoding::from_label(StringView) -> Self?
 pub fn Encoding::name(Self) -> String
 pub fn Encoding::to_string(Self) -> String
 pub impl Show for Encoding

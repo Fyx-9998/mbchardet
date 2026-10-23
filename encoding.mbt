@@ -1,5 +1,11 @@
 ///|
-/// An encoding mbchardet can report.
+/// An encoding of the WHATWG Encoding Standard
+/// (<https://encoding.spec.whatwg.org/#names-and-labels>), which has 40.
+///
+/// The variants up to `Ibm866` are those `sniff_bom` and `Detector` report:
+/// UTF-8 and UTF-16, and the legacy encodings chardetng can guess. The
+/// variants after it only come from a label, through `Encoding::from_label`
+/// or `prescan_html`.
 pub(all) enum Encoding {
   Utf8
   Utf16Be
@@ -29,6 +35,23 @@ pub(all) enum Encoding {
   Iso8859_13
   Koi8U
   Ibm866
+  Iso8859_3
+  Iso8859_8I
+  Iso8859_10
+  Iso8859_14
+  Iso8859_15
+  Iso8859_16
+  Koi8R
+  Macintosh
+  XMacCyrillic
+  Gb18030
+  /// The encoding the standard maps the labels of ISO-2022-KR, HZ-GB-2312
+  /// and ISO-2022-CN to. Its decoder turns any input into a single U+FFFD,
+  /// so that content in these encodings is never decoded.
+  Replacement
+  /// x-user-defined, which maps the bytes 0x80 to 0xFF to the Private Use
+  /// Area code points U+F780 to U+F7FF.
+  XUserDefined
 } derive(Eq, Hash, Debug)
 
 ///|
@@ -65,11 +88,23 @@ pub fn Encoding::name(self : Encoding) -> String {
     Iso8859_13 => "ISO-8859-13"
     Koi8U => "KOI8-U"
     Ibm866 => "IBM866"
+    Iso8859_3 => "ISO-8859-3"
+    Iso8859_8I => "ISO-8859-8-I"
+    Iso8859_10 => "ISO-8859-10"
+    Iso8859_14 => "ISO-8859-14"
+    Iso8859_15 => "ISO-8859-15"
+    Iso8859_16 => "ISO-8859-16"
+    Koi8R => "KOI8-R"
+    Macintosh => "macintosh"
+    XMacCyrillic => "x-mac-cyrillic"
+    Gb18030 => "gb18030"
+    Replacement => "replacement"
+    XUserDefined => "x-user-defined"
   }
 }
 
 ///|
-/// Every encoding mbchardet can report, in declaration order.
+/// Every encoding of the standard, in declaration order.
 pub fn Encoding::all() -> Array[Encoding] {
   [
     Utf8,
@@ -100,7 +135,37 @@ pub fn Encoding::all() -> Array[Encoding] {
     Iso8859_13,
     Koi8U,
     Ibm866,
+    Iso8859_3,
+    Iso8859_8I,
+    Iso8859_10,
+    Iso8859_14,
+    Iso8859_15,
+    Iso8859_16,
+    Koi8R,
+    Macintosh,
+    XMacCyrillic,
+    Gb18030,
+    Replacement,
+    XUserDefined,
   ]
+}
+
+///|
+/// The encoding `label` names, found as the standard's "get an encoding"
+/// (<https://encoding.spec.whatwg.org/#concept-encoding-get>) finds it:
+/// ASCII whitespace around the label is ignored, and so is the case of ASCII
+/// letters. Returns `None` for a label the standard does not define, such
+/// as `"utf-7"` or `"utf-32"`.
+///
+/// Many labels are other names of an encoding: `"latin1"` and `"ascii"`
+/// name windows-1252, `"gb2312"` names GBK and `"utf-16"` names UTF-16LE.
+pub fn Encoding::from_label(label : StringView) -> Encoding? {
+  let label = label.trim(chars="\t\n\u{0C}\r ")
+  let lower = StringBuilder()
+  for c in label {
+    lower.write_char(c.to_ascii_lowercase())
+  }
+  encoding_for_label(lower.to_string())
 }
 
 ///|

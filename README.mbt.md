@@ -7,7 +7,8 @@ they can be decoded correctly instead of turning into mojibake.
 ## Status
 
 Early development. The detector, ported from chardetng 1.0.0, scores the
-encodings chardetng detects and guesses between them as chardetng does.
+encodings chardetng detects and guesses between them as chardetng does. The
+prescan of the HTML Standard finds the encoding a document declares.
 
 Implemented:
 
@@ -49,22 +50,46 @@ Implemented:
   Standard's index tables; a second test compares them with the decoders of
   encoding_rs 0.8.42, which chardetng uses, on every one- and two-byte input,
   every four-byte GB18030 sequence in the BMP, every EUC-JP sequence for JIS
-  X 0212, and the ISO-2022-JP escape sequences.
+  X 0212, and the ISO-2022-JP escape sequences. `Detector::encodings()`
+  lists the 26 encodings the detector scores.
+- `prescan_html(bytes)`: the
+  [prescan](https://html.spec.whatwg.org/multipage/parsing.html#prescan-a-byte-stream-to-determine-its-encoding)
+  of the HTML Standard, which browsers run before they parse a document
+  that has no byte order mark and no encoding from the transport layer. It
+  finds the encoding that a `<meta charset>` or a
+  `<meta http-equiv="Content-Type" content="...">` in the first 1024 bytes
+  declares, otherwise one that an XML declaration such as
+  `<?xml version="1.0" encoding="windows-1251"?>` at the start declares, and
+  UTF-16 when the document starts with `<?x` in UTF-16. It passes the
+  encoding cases of html5lib-tests and the XML declaration cases of
+  web-platform-tests, and gives the answers of html-encoding-sniffer 7.0.0
+  (of the jsdom project) for 471,093 variations of 131 short documents,
+  except in two cases where html-encoding-sniffer departs from the standard
+  (see [Testing](#testing)).
 - `mbchardet`, a command-line tool (`cmd/main`): for each file, the
   encoding its byte order mark names if it has one, otherwise the
   detector's guess, with options for the top-level domain, for denying
   UTF-8 or ISO-2022-JP, and for listing the scores. See
   [Command line](#command-line).
-- `Encoding`: the encodings mbchardet reports, with `name()` giving the
-  canonical name from the Encoding Standard (`"UTF-8"`, `"windows-1251"`,
-  ...) and `Encoding::all()`. These names are valid labels for any decoder
-  that follows the standard.
+- `Encoding`: the 40 encodings of the Encoding Standard, with `name()`
+  giving the canonical name (`"UTF-8"`, `"windows-1251"`, ...) and
+  `Encoding::all()`. These names are valid labels for any decoder that
+  follows the standard. `Encoding::from_label(label)` finds the encoding a
+  label names, as the standard's
+  [get an encoding](https://encoding.spec.whatwg.org/#concept-encoding-get)
+  does: `"latin1"` names windows-1252 and `"gb2312"` GBK. A test compares it
+  with encoding_rs 0.8.42 on the 228 labels of the standard, variations of
+  them in case and whitespace, and strings that are no label. The detector
+  and `sniff_bom` only report the first 28 encodings, up to `Ibm866`; the
+  others only come from labels.
 
 Planned, not implemented yet:
 
-- The encoding sniffing steps of the
-  [HTML Standard](https://html.spec.whatwg.org/multipage/parsing.html#determining-the-character-encoding):
-  byte order mark, transport-layer label, `<meta>` prescan.
+- The encoding sniffing algorithm of the
+  [HTML Standard](https://html.spec.whatwg.org/multipage/parsing.html#determining-the-character-encoding),
+  which puts these steps together: byte order mark, transport-layer label,
+  prescan, then the detector, reporting which step decided; and the same
+  for XML documents.
 - Conversion to UTF-8 that refuses input it cannot convert without loss,
   in the library and the command-line tool, and a browser demo.
 
@@ -223,6 +248,52 @@ Input can arrive in chunks: call `feed` for each and set `last=true` on the
 final one, which may be empty. The end of the input counts as a space after
 the last word, so leave `last` unset to score a prefix of a longer stream.
 
+## Declared encodings
+
+An encoding can also be named: by a label, such as the `charset` of an HTTP
+`Content-Type` header, or by a declaration in the document. Labels are
+looked up as the Encoding Standard says, ignoring ASCII case and the ASCII
+whitespace around them:
+
+```mbt check
+///|
+test {
+  assert_eq(
+    @mbchardet.Encoding::from_label(" Latin1 "),
+    Some(@mbchardet.Windows1252),
+  )
+  assert_eq(
+    @mbchardet.Encoding::from_label("x-sjis"),
+    Some(@mbchardet.ShiftJis),
+  )
+  assert_eq(@mbchardet.Encoding::from_label("utf-7"), None)
+}
+```
+
+`prescan_html` finds what the start of an HTML document declares, the way
+browsers do before they parse it. It reads the markup as ASCII, so it works
+whatever the encoding of the text, and skips declarations inside comments
+and inside the attributes of other tags:
+
+```mbt check
+///|
+test {
+  let page = b"<!doctype html><html><head><meta charset=\"gb2312\"><title>"
+  assert_eq(@mbchardet.prescan_html(page[:]), Some(@mbchardet.Gbk))
+  let old = b"<meta http-equiv=\"Content-Type\" content=\"text/html; charset=Shift_JIS\">"
+  assert_eq(@mbchardet.prescan_html(old[:]), Some(@mbchardet.ShiftJis))
+  let xhtml = b"<?xml version=\"1.0\" encoding=\"windows-1251\"?>\n<html>"
+  assert_eq(@mbchardet.prescan_html(xhtml[:]), Some(@mbchardet.Windows1251))
+  let commented = b"<!-- <meta charset=\"utf-8\"> --><p>"
+  assert_eq(@mbchardet.prescan_html(commented[:]), None)
+}
+```
+
+As the standard requires, a `<meta>` that declares UTF-16 gives UTF-8: a
+document whose markup reads as ASCII is not in UTF-16. A declaration can
+also be wrong; the prescan reports what the document says, not whether its
+bytes agree.
+
 ## Command line
 
 `cmd/main` is the `mbchardet` command. `moon run cmd/main --` followed by
@@ -261,27 +332,47 @@ missing file name also print the help text.
 ## Testing
 
 `moon test` runs unit tests, tests of the command-line tool, and golden
-tests against data that chardetng and encoding_rs themselves produced. The
-data and the tables are generated, and CI checks that regenerating them gives
-the committed files:
+tests against data that chardetng, encoding_rs and html-encoding-sniffer
+themselves produced. The data and the tables are generated, and CI checks
+that regenerating them gives the committed files:
 
 - `tools/gen_corpus.py` picks sentences from Tatoeba into `tools/corpus.tsv`.
 - `tools/golden` (Rust, with chardetng 1.0.0 and encoding_rs 0.8.42 pinned
   in `Cargo.lock`) encodes each sentence in every encoding that can
   represent it, adds edge cases, and writes chardetng's scores and guesses
   to `golden_data_test.mbt`. It also writes `golden_trace_wbtest.mbt`, hashes of
-  how the CJK decoders of encoding_rs answer byte by byte.
+  how the CJK decoders of encoding_rs answer byte by byte, and
+  `golden_labels_test.mbt`, the encoding that encoding_rs finds for each
+  label of the Encoding Standard and for variations of them.
 - `tools/gen_data.py` writes chardetng's tables from its `src/data.rs` and
   `src/tld.rs` to `detector_data.mbt`.
 - `tools/gen_index.py` writes the GB18030, Big5, JIS X 0208, JIS X 0212 and
   EUC-KR tables from the index files of the Encoding Standard to
-  `cjk_index_data.mbt`; its documentation gives the pinned download.
+  `cjk_index_data.mbt`, and `tools/gen_labels.py` its labels from
+  `encodings.json` to `label_data.mbt`; their documentation gives the
+  pinned downloads.
+- `tools/sniffer` (Node.js, with html-encoding-sniffer 7.0.0 pinned in
+  `package-lock.json`) writes `prescan_data_test.mbt`: the 74 encoding cases
+  of html5lib-tests that are at most 1024 bytes long and the 41 XML
+  declaration documents of web-platform-tests, with the encoding each
+  suite expects, and what html-encoding-sniffer finds for 471,093
+  variations of 131 short documents (every prefix, and each byte deleted,
+  replaced by one of 20 bytes, or preceded by one of them). Before using
+  html-encoding-sniffer, the tool corrects it in the two cases where it
+  departs from the HTML Standard: it ends an end tag such as `</p` at the
+  first `>`, even inside a quoted attribute value, and it lets a `content`
+  attribute count after a `charset` attribute whose label names no
+  encoding. The first correction changes 63 of the answers, the second
+  none; `prescan_test.mbt` tests both cases against the standard.
 
 ```
 python tools/gen_corpus.py CACHE_DIR tools/corpus.tsv
-cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt
+cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt WHATWG_DIR/encodings.json golden_labels_test.mbt
 python tools/gen_data.py CHARDETNG_SOURCE/src detector_data.mbt
-python tools/gen_index.py WHATWG_INDEX_DIR cjk_index_data.mbt
+python tools/gen_index.py WHATWG_DIR cjk_index_data.mbt
+python tools/gen_labels.py WHATWG_DIR/encodings.json label_data.mbt
+npm ci --prefix tools/sniffer
+node tools/sniffer/main.mjs HTML5LIB_DIR WPT_DIR prescan_data_test.mbt
 moon fmt
 ```
 
@@ -298,9 +389,13 @@ each backend.
 ## License
 
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or
-[MIT license](LICENSE-MIT), at your option, except `cjk_index_data.mbt`,
-which holds data of the WHATWG Encoding Standard under the
-[BSD 3-Clause License](LICENSE-WHATWG).
+[MIT license](LICENSE-MIT), at your option, except for files that hold data
+of others: `cjk_index_data.mbt`, `label_data.mbt` and
+`golden_labels_test.mbt` hold data of the WHATWG Encoding Standard under the
+[BSD 3-Clause License](LICENSE-WHATWG), and `prescan_data_test.mbt` holds
+test cases of html5lib-tests under the
+[MIT License](LICENSE-HTML5LIB-TESTS) and of web-platform-tests under the
+[BSD 3-Clause License](LICENSE-WPT).
 
 The detector is ported from chardetng 1.0.0 (Apache-2.0 OR MIT, copyright
 Mozilla Foundation), and its tables come from chardetng's `data.rs`, which is
