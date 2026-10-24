@@ -13,7 +13,8 @@ prescan of the HTML Standard finds the encoding a document declares, and
 order the HTML Standard and XML 1.0 give. `Encoding::decode` turns bytes into
 text and refuses, instead of replacing, a byte sequence that is not valid in
 the encoding; the command-line tool can write the text in UTF-8, and a
-browser demo shows the encoding, the scores and the text of a file.
+[browser demo](https://fyx-9998.github.io/mbchardet/) shows the encoding,
+the scores and the text of a file.
 
 Implemented:
 
@@ -105,7 +106,8 @@ Implemented:
   See [Command line](#command-line).
 - A browser demo (`demo/`): open a file, or one of the samples, and see its
   encoding, the step that decided, the detector's scores and the text, and
-  download the text in UTF-8. The `demo` package compiles to JavaScript.
+  download the text in UTF-8. The `demo` package compiles to JavaScript,
+  and the page is published at <https://fyx-9998.github.io/mbchardet/>.
   See [Browser demo](#browser-demo).
 - `Encoding`: the 40 encodings of the Encoding Standard, with `name()`
   giving the canonical name (`"UTF-8"`, `"windows-1251"`, ...) and
@@ -118,9 +120,6 @@ Implemented:
   them in case and whitespace, and strings that are no label. The detector
   and `sniff_bom` only report the first 28 encodings, up to `Ibm866`; the
   others only come from labels.
-
-Not done yet: the demo is not published as a website. CI builds it on
-every push and keeps it with the run.
 
 ## Usage
 
@@ -591,8 +590,9 @@ python -m http.server -d _site
 ```
 
 and open <http://localhost:8000>. `tools/check_demo.mjs` checks the built
-module in Node. CI builds the demo on every push, runs that check, and
-keeps the page as an artifact named `demo`.
+module in Node. CI builds the demo on every push and runs that check; on
+`main`, once every other job has passed, it publishes the page with GitHub
+Pages at <https://fyx-9998.github.io/mbchardet/>.
 
 ## Testing
 

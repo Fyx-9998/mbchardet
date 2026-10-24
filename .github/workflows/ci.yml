@@ -165,11 +165,31 @@ jobs:
       - name: Check the compiled module
         run: node tools/check_demo.mjs _site
 
-      - name: Keep the demo
-        uses: actions/upload-artifact@v7.0.2
+      # Kept as the artifact github-pages, which the pages job publishes.
+      - uses: actions/upload-pages-artifact@v5.0.0
         with:
-          name: demo
           path: _site
+
+  pages:
+    name: Publish the demo
+    # Only what passes every job on main is published.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, demo, generated-data]
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v6.0.0
+
+      - id: deployment
+        uses: actions/deploy-pages@v5.0.1
 
   generated-data:
     name: Generated data
