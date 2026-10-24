@@ -1,6 +1,7 @@
 import {
   "Fyx-9998/mbchardet",
   "moonbitlang/core/argparse",
+  "moonbitlang/core/encoding/utf8",
   "moonbitlang/x/fs",
   "moonbitlang/x/sys",
 }

@@ -10,7 +10,9 @@ Early development. The detector, ported from chardetng 1.0.0, scores the
 encodings chardetng detects and guesses between them as chardetng does. The
 prescan of the HTML Standard finds the encoding a document declares, and
 `sniff_html` and `sniff_xml` find the encoding of a whole document in the
-order the HTML Standard and XML 1.0 give.
+order the HTML Standard and XML 1.0 give. `Encoding::decode` turns bytes into
+text and refuses, instead of replacing, a byte sequence that is not valid in
+the encoding; the command-line tool can write the text in UTF-8.
 
 Implemented:
 
@@ -80,13 +82,26 @@ Implemented:
   XML declarations with expat, the XML parser of Firefox, on 61,152
   variations of 34 short documents, except where expat accepts version
   numbers that XML 1.0 does not (see [Testing](#testing)).
+- `encoding.decode(bytes)`: the text of `bytes` in any of the 40 encodings,
+  or a `DecodeError` with the offset and length of the first malformed byte
+  sequence. It decodes as the decoders of the Encoding Standard do with the
+  error mode "fatal", like `TextDecoder` with `fatal: true`, and removes a
+  byte order mark of the encoding. A test compares the text and the errors
+  with encoding_rs 0.8.42 in all 40 encodings: on every input of one byte;
+  on every input of two bytes in UTF-8, UTF-16BE, UTF-16LE, GBK, Big5,
+  Shift_JIS, EUC-JP, ISO-2022-JP and EUC-KR, and after prefixes such as a
+  UTF-16 lead surrogate, the start of a four-byte GB18030 sequence or an
+  ISO-2022-JP escape sequence; and on 96,850 variations of 88 short texts.
+  The single-byte encodings use tables built from the Encoding Standard's
+  index files. See [Decoding](#decoding).
 - `mbchardet`, a command-line tool (`cmd/main`): for each file, the
   encoding its byte order mark names if it has one, otherwise the
   detector's guess, and which of them decided. `--charset` passes a label
   from the transport layer, and `--html` and `--xml` find the encoding as
   `sniff_html` and `sniff_xml` do. Other options set the top-level domain,
-  deny UTF-8 or ISO-2022-JP, and list the scores. See
-  [Command line](#command-line).
+  deny UTF-8 or ISO-2022-JP, and list the scores. `--output` writes a file
+  in UTF-8, unless a byte sequence in it is not valid in the encoding found.
+  See [Command line](#command-line).
 - `Encoding`: the 40 encodings of the Encoding Standard, with `name()`
   giving the canonical name (`"UTF-8"`, `"windows-1251"`, ...) and
   `Encoding::all()`. These names are valid labels for any decoder that
@@ -101,8 +116,7 @@ Implemented:
 
 Planned, not implemented yet:
 
-- Conversion to UTF-8 that refuses input it cannot convert without loss,
-  in the library and the command-line tool, and a browser demo.
+- A browser demo.
 
 ## Usage
 
@@ -403,6 +417,79 @@ UTF-16LE or UTF-16BE, as appendix F of XML 1.0 detects. XML 1.0 also
 detects UTF-32 and EBCDIC, which the Encoding Standard does not define;
 `sniff_xml` gives such documents UTF-8.
 
+## Decoding
+
+`Encoding::decode` turns bytes into text, and refuses bytes that are not
+valid in the encoding instead of replacing them. A decoder that turns each
+malformed sequence into U+FFFD loses the bytes it replaces, and the loss
+goes unnoticed until someone reads the result; `decode` says where the first
+malformed sequence is:
+
+```mbt check
+///|
+test {
+  // A CSV file in GBK, as Excel on Chinese Windows saves it.
+  let csv = b"name,city\n\xD5\xC5\xCE\xB0,\xB1\xB1\xBE\xA9\n"
+  let gbk = @mbchardet.Gbk
+  assert_eq(gbk.decode(csv[:]), Ok("name,city\n张伟,北京\n"))
+  // The same file cut inside its last character.
+  match gbk.decode(csv[:csv.length() - 2]) {
+    Err(error) => {
+      assert_eq(error.valid_up_to, 17)
+      assert_eq(error.error_len, None)
+      assert_eq(
+        error.to_string(),
+        "invalid GBK: input ends inside a sequence that starts at offset 17",
+      )
+    }
+    Ok(_) => fail("expected an error")
+  }
+}
+```
+
+With the encoding that `sniff_bom`, `sniff_html`, `sniff_xml` or the
+detector finds, `decode` gives the text of input whose encoding was not
+known. A byte order mark of the encoding is removed, as `TextDecoder`
+removes it:
+
+```mbt check
+///|
+test {
+  let page = b"\xEF\xBB\xBF<p>caf\xC3\xA9</p>"
+  let sniffed = @mbchardet.sniff_html(page[:])
+  assert_eq(sniffed.encoding.decode(page[:]), Ok("<p>café</p>"))
+}
+```
+
+Valid does not mean right. In a single-byte encoding nearly every byte is
+valid, so text decoded with a wrong guess comes out with wrong letters and
+no error. The Slovak sentence of [Usage](#usage), which the detector
+guesses as ISO-8859-4 without the `sk` hint, decodes in ISO-8859-4 to
+"Keī" where windows-1250 gives "Keď":
+
+```mbt check
+///|
+test {
+  let data = b"Ke\xEF som ju uvidel, zamrelo mi srdce."
+  assert_eq(
+    @mbchardet.Iso8859_4.decode(data[:]),
+    Ok("Keī som ju uvidel, zamrelo mi srdce."),
+  )
+  assert_eq(
+    @mbchardet.Windows1250.decode(data[:]),
+    Ok("Keď som ju uvidel, zamrelo mi srdce."),
+  )
+}
+```
+
+Where that matters, pass the encoding when it is known, give the detector
+the top-level domain, or look at the scores. The replacement encoding,
+which the labels of ISO-2022-KR, ISO-2022-CN and HZ-GB-2312 name, decodes
+only empty input. mbchardet does not encode text, nor decode with
+replacement; [moon_encoding](https://github.com/LL728/moon_encoding)
+implements the encoders of the Encoding Standard, and its decoders with
+replacement.
+
 ## Command line
 
 `cmd/main` is the `mbchardet` command. `moon run cmd/main --` followed by
@@ -410,8 +497,9 @@ its arguments runs it, on any backend (`--target native` builds a native
 executable). Here `sk.txt` holds the Slovak sentence above in windows-1250,
 `zh.txt` Chinese text in GBK, `bom.csv` a CSV file that starts with a
 UTF-8 byte order mark, `ascii.txt` plain ASCII, `page.html` a page with
-`<meta charset="Shift_JIS">`, and `feed.xml` a feed that starts with
-`<?xml version="1.0" encoding="windows-1251"?>`:
+`<meta charset="Shift_JIS">`, `feed.xml` a feed that starts with
+`<?xml version="1.0" encoding="windows-1251"?>`, and `bad.txt` the text
+`ok`, a space, the byte 81 and ` bad`, which is not valid GBK:
 
 ```
 $ moon run cmd/main -- sk.txt zh.txt bom.csv ascii.txt
@@ -427,6 +515,12 @@ $ moon run cmd/main -- --xml feed.xml
 feed.xml: windows-1251 (declared)
 $ moon run cmd/main -- --xml --charset koi8-r feed.xml
 feed.xml: KOI8-R (--charset)
+$ moon run cmd/main -- --tld sk -o sk.utf8.txt sk.txt
+sk.txt: windows-1250
+sk.utf8.txt: UTF-8 (converted from sk.txt)
+$ moon run cmd/main -- --charset gbk -o out.txt bad.txt
+bad.txt: GBK (--charset)
+bad.txt: error: invalid GBK: malformed sequence of 1 byte at offset 3 (81); out.txt not written
 ```
 
 Each file gets a line with its encoding, followed by the step that decided
@@ -454,11 +548,20 @@ file the same way, and `(empty)` that the file is empty.
 - `--deny-iso-2022-jp`: never guess ISO-2022-JP.
 - `--scores`: also list each encoding's score, highest first, and the
   encodings ruled out. The scores do not include the `--tld` hint.
+- `--output FILE` or `-o FILE`: also write the file, which has to be the
+  only one, to `FILE` in UTF-8, without a byte order mark, decoded with
+  `Encoding::decode` from the encoding found. If a byte sequence in it is
+  not valid in that encoding, nothing is written, and the error gives the
+  offset and the bytes of the first one. A wrong guess that happens to be
+  valid is converted all the same (see [Decoding](#decoding)), so check
+  the encoding or pass `--charset`. Not with `--html` or `--xml`: the
+  converted document would still declare its old encoding.
 
 Errors go to standard error, or to standard output with wasm-gc, which has
-no standard error in MoonBit. A file that cannot be read makes the exit
-status 1, and an invalid command line makes it 2; unknown options, options
-that do not go together and a missing file name also print the help text.
+no standard error in MoonBit. A file that cannot be read, cannot be
+converted or cannot be written makes the exit status 1, and an invalid
+command line makes it 2; unknown options, options that do not go together
+and a missing file name also print the help text.
 
 ## Testing
 
@@ -474,12 +577,18 @@ checks that regenerating them gives the committed files:
   to `golden_data_test.mbt`. It also writes `golden_trace_wbtest.mbt`, hashes of
   how the CJK decoders of encoding_rs answer byte by byte, and
   `golden_labels_test.mbt`, the encoding that encoding_rs finds for each
-  label of the Encoding Standard and for variations of them.
+  label of the Encoding Standard and for variations of them, and
+  `decode_data_test.mbt`, hashes of what its decoders give for whole inputs
+  in each of the 40 encodings: groups of every input of one or two bytes
+  after a prefix, and 88 short seeds, most of them prefixes of corpus
+  sentences, with their variations, made as for `tools/sniffer` with 24
+  bytes to replace or insert.
 - `tools/gen_data.py` writes chardetng's tables from its `src/data.rs` and
   `src/tld.rs` to `detector_data.mbt`.
 - `tools/gen_index.py` writes the GB18030, Big5, JIS X 0208, JIS X 0212 and
   EUC-KR tables from the index files of the Encoding Standard to
-  `cjk_index_data.mbt`, and `tools/gen_labels.py` its labels from
+  `cjk_index_data.mbt` and the tables of its 27 single-byte indexes to
+  `single_byte_index_data.mbt`, and `tools/gen_labels.py` its labels from
   `encodings.json` to `label_data.mbt`; their documentation gives the
   pinned downloads.
 - `tools/sniffer` (Node.js, with html-encoding-sniffer 7.0.0 pinned in
@@ -508,9 +617,9 @@ checks that regenerating them gives the committed files:
 
 ```
 python tools/gen_corpus.py CACHE_DIR tools/corpus.tsv
-cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt WHATWG_DIR/encodings.json golden_labels_test.mbt
+cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt WHATWG_DIR/encodings.json golden_labels_test.mbt decode_data_test.mbt
 python tools/gen_data.py CHARDETNG_SOURCE/src detector_data.mbt
-python tools/gen_index.py WHATWG_DIR cjk_index_data.mbt
+python tools/gen_index.py WHATWG_DIR cjk_index_data.mbt single_byte_index_data.mbt
 python tools/gen_labels.py WHATWG_DIR/encodings.json label_data.mbt
 npm ci --prefix tools/sniffer
 node tools/sniffer/main.mjs HTML5LIB_DIR WPT_DIR prescan_data_test.mbt
@@ -521,10 +630,10 @@ moon fmt
 ## Platforms
 
 The library is pure MoonBit with no dependencies. The command-line tool also
-uses `moonbitlang/core/argparse` and, to read files, the `fs` and `sys`
-packages of [moonbitlang/x](https://github.com/moonbitlang/x) 0.5.6 (Apache
-2.0); depending on the module downloads moonbitlang/x, which only the tool
-builds. CI checks and tests everything on the wasm, wasm-gc, js and native
+uses `moonbitlang/core/argparse` and, to read and write files, the `fs` and
+`sys` packages of [moonbitlang/x](https://github.com/moonbitlang/x) 0.5.6
+(Apache 2.0); depending on the module downloads moonbitlang/x, which only the
+tool builds. CI checks and tests everything on the wasm, wasm-gc, js and native
 backends, on Linux, macOS and Windows, and runs the tool on sample files with
 each backend.
 
@@ -532,10 +641,10 @@ each backend.
 
 Licensed under either of [Apache License 2.0](LICENSE-APACHE) or
 [MIT license](LICENSE-MIT), at your option, except for files that hold data
-of others: `cjk_index_data.mbt`, `label_data.mbt` and
-`golden_labels_test.mbt` hold data of the WHATWG Encoding Standard under the
-[BSD 3-Clause License](LICENSE-WHATWG), and `prescan_data_test.mbt` holds
-test cases of html5lib-tests under the
+of others: `cjk_index_data.mbt`, `single_byte_index_data.mbt`,
+`label_data.mbt` and `golden_labels_test.mbt` hold data of the WHATWG
+Encoding Standard under the [BSD 3-Clause License](LICENSE-WHATWG), and
+`prescan_data_test.mbt` holds test cases of html5lib-tests under the
 [MIT License](LICENSE-HTML5LIB-TESTS) and of web-platform-tests under the
 [BSD 3-Clause License](LICENSE-WPT).
 

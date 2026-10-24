@@ -21,6 +21,14 @@ pub fn tld_may_affect_guess(String) -> Bool
 // Errors
 
 // Types and methods
+pub(all) struct DecodeError {
+  encoding : Encoding
+  valid_up_to : Int32
+  error_len : Int32?
+} derive(Eq, @debug.Debug)
+pub fn DecodeError::to_string(Self) -> String
+pub impl Show for DecodeError
+
 type Detector
 pub fn Detector::encodings() -> Array[Encoding]
 pub fn Detector::feed(Self, BytesView, last? : Bool) -> Bool
@@ -71,6 +79,7 @@ pub(all) enum Encoding {
   XUserDefined
 } derive(Eq, Hash, @debug.Debug)
 pub fn Encoding::all() -> Array[Self]
+pub fn Encoding::decode(Self, BytesView) -> Result[String, DecodeError]
 pub fn Encoding::from_label(StringView) -> Self?
 pub fn Encoding::name(Self) -> String
 pub fn Encoding::to_string(Self) -> String

@@ -1,12 +1,13 @@
 //! Writes the golden test data: golden_data_test.mbt, the scores and guesses
 //! chardetng 1.0.0 gives the test inputs; golden_trace_wbtest.mbt, how the
 //! GBK, Big5, Shift_JIS, EUC-JP, ISO-2022-JP and EUC-KR decoders of
-//! encoding_rs answer byte by byte; and golden_labels_test.mbt, the encoding
-//! encoding_rs finds for labels.
+//! encoding_rs answer byte by byte; golden_labels_test.mbt, the encoding
+//! encoding_rs finds for labels; and decode_data_test.mbt, what the decoders
+//! of encoding_rs give for whole inputs in each of the 40 encodings.
 //!
 //!     cargo run --release --manifest-path tools/golden/Cargo.toml -- \
 //!         tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt \
-//!         encodings.json golden_labels_test.mbt
+//!         encodings.json golden_labels_test.mbt decode_data_test.mbt
 //!
 //! The inputs are every row of tools/corpus.tsv encoded in each encoding
 //! mbchardet scores that can represent it without loss, followed by
@@ -28,6 +29,10 @@
 //! tools/gen_labels.py), variations of them and strings that are no label,
 //! described in `label_inputs`; for each, the file records what
 //! `Encoding::for_label` finds.
+//!
+//! The decoding data hashes what a decoder with BOM removal and without
+//! replacement gives for each input: the text, or where the first malformed
+//! sequence is. The inputs are described in `decodes`.
 
 use chardetng::{EncodingDetector, Iso2022JpDetection, Utf8Detection};
 use encoding_rs::*;
@@ -689,15 +694,301 @@ fn labels(json_path: &str) -> String {
     out
 }
 
+/// The encodings of the Encoding Standard, in the order of mbchardet's
+/// `Encoding::all()`.
+const ALL: [&Encoding; 40] = [
+    UTF_8,
+    UTF_16BE,
+    UTF_16LE,
+    GBK,
+    BIG5,
+    SHIFT_JIS,
+    EUC_JP,
+    ISO_2022_JP,
+    EUC_KR,
+    WINDOWS_874,
+    WINDOWS_1250,
+    WINDOWS_1251,
+    WINDOWS_1252,
+    WINDOWS_1253,
+    WINDOWS_1254,
+    WINDOWS_1255,
+    WINDOWS_1256,
+    WINDOWS_1257,
+    WINDOWS_1258,
+    ISO_8859_2,
+    ISO_8859_4,
+    ISO_8859_5,
+    ISO_8859_6,
+    ISO_8859_7,
+    ISO_8859_8,
+    ISO_8859_13,
+    KOI8_U,
+    IBM866,
+    ISO_8859_3,
+    ISO_8859_8_I,
+    ISO_8859_10,
+    ISO_8859_14,
+    ISO_8859_15,
+    ISO_8859_16,
+    KOI8_R,
+    MACINTOSH,
+    X_MAC_CYRILLIC,
+    GB18030,
+    REPLACEMENT,
+    X_USER_DEFINED,
+];
+
+/// The bytes the mutations of the decoding seeds put in: bytes that start,
+/// continue or end a sequence in some encoding, and bytes some single-byte
+/// encodings have no code point for.
+const DECODE_ALPHABET: &[u8] = b"\x00\x0E\x1B$(09@BIJ\\~\x80\x81\x8E\x8F\xA1\xBF\xD8\xDC\xEF\xFE\xFF";
+
+/// Seeds from the corpus are at most this long.
+const SEED_LENGTH: usize = 24;
+
+/// What `Encoding::decode` must give for `input`: the text, or the offset
+/// of the first malformed sequence and its length, with no length when the
+/// input ends inside a sequence. Like `TextDecoder` with `fatal: true`, a
+/// byte order mark of the encoding is removed.
+fn decode(encoding: &'static Encoding, input: &[u8]) -> Result<String, (usize, Option<u8>)> {
+    let mut decoder = encoding.new_decoder_with_bom_removal();
+    let capacity = decoder
+        .max_utf8_buffer_length_without_replacement(input.len())
+        .expect("short input");
+    let mut text = String::with_capacity(capacity);
+    let (result, read) = decoder.decode_to_string_without_replacement(input, &mut text, false);
+    match result {
+        DecoderResult::Malformed(bad, good) => {
+            return Err((read - usize::from(good) - usize::from(bad), Some(bad)));
+        }
+        DecoderResult::OutputFull => unreachable!(),
+        DecoderResult::InputEmpty => assert_eq!(read, input.len()),
+    }
+    match decoder.decode_to_string_without_replacement(b"", &mut text, true).0 {
+        DecoderResult::Malformed(bad, good) => {
+            Err((input.len() - usize::from(good) - usize::from(bad), None))
+        }
+        DecoderResult::OutputFull => unreachable!(),
+        DecoderResult::InputEmpty => Ok(text),
+    }
+}
+
+/// Hashes what decoding `input` gives: [0, length, UTF-16 code units...]
+/// for text, [1, offset, length or 0xFFFFFFFF] for an error.
+fn hash_decode(encoding: &'static Encoding, input: &[u8], hash: &mut Fnv) {
+    match decode(encoding, input) {
+        Ok(text) => {
+            let units: Vec<u16> = text.encode_utf16().collect();
+            hash.word(0);
+            hash.word(units.len() as u32);
+            for u in units {
+                hash.word(u32::from(u));
+            }
+        }
+        Err((offset, length)) => {
+            hash.word(1);
+            hash.word(offset as u32);
+            hash.word(length.map_or(u32::MAX, u32::from));
+        }
+    }
+}
+
+/// Every prefix of `seed`, from the empty one; `seed` without each byte;
+/// with each byte replaced by each byte of `alphabet`; and with each byte
+/// of `alphabet` inserted before each byte and at the end. The same order
+/// as `mutations` in mutation_test.mbt.
+fn mutations(seed: &[u8], alphabet: &[u8]) -> Vec<Vec<u8>> {
+    let n = seed.len();
+    let mut out: Vec<Vec<u8>> = (0..=n).map(|length| seed[..length].to_vec()).collect();
+    for i in 0..n {
+        out.push([&seed[..i], &seed[i + 1..]].concat());
+    }
+    for i in 0..n {
+        for &b in alphabet {
+            let mut copy = seed.to_vec();
+            copy[i] = b;
+            out.push(copy);
+        }
+    }
+    for i in 0..=n {
+        for &b in alphabet {
+            out.push([&seed[..i], &[b], &seed[i..]].concat());
+        }
+    }
+    out
+}
+
+/// `text` in UTF-16 with the given byte order.
+fn utf16(text: &str, big_endian: bool) -> Vec<u8> {
+    text.encode_utf16()
+        .flat_map(|u| if big_endian { u.to_be_bytes() } else { u.to_le_bytes() })
+        .collect()
+}
+
+/// The longest prefix of `text` that `encoding` encodes without loss in at
+/// most SEED_LENGTH bytes, if it has a byte outside ASCII or an escape.
+fn seed_from(text: &str, encoding: &'static Encoding) -> Option<Vec<u8>> {
+    let mut best = None;
+    for (end, _) in text.char_indices().skip(1).chain([(text.len(), ' ')]) {
+        let prefix = &text[..end];
+        let bytes = if encoding == UTF_16BE || encoding == UTF_16LE {
+            Some(utf16(prefix, encoding == UTF_16BE))
+        } else {
+            encode(prefix, encoding)
+        };
+        match bytes {
+            Some(bytes) if bytes.len() <= SEED_LENGTH => best = Some(bytes),
+            _ => break,
+        }
+    }
+    best.filter(|bytes| bytes.iter().any(|&b| b >= 0x80 || b == 0x1B))
+}
+
+/// The seeds the decoding tests mutate: for each encoding but replacement
+/// and x-user-defined, the first two sentences of the corpus that give a
+/// seed, then seeds for
+/// what the corpus does not have, such as byte order marks, astral
+/// characters, Big5 letters with combining marks, JIS X 0212 and the
+/// ISO-2022-JP katakana and Roman sets.
+fn decode_seeds(texts: &[&str]) -> Vec<(&'static Encoding, Vec<u8>)> {
+    let mut seeds = Vec::new();
+    for &encoding in ALL.iter().filter(|&&e| e != REPLACEMENT && e != X_USER_DEFINED) {
+        let mut found: Vec<Vec<u8>> = Vec::new();
+        for text in texts {
+            if found.len() == 2 {
+                break;
+            }
+            if let Some(bytes) = seed_from(text, encoding) {
+                if !found.contains(&bytes) {
+                    found.push(bytes);
+                }
+            }
+        }
+        assert_eq!(found.len(), 2, "two seeds for {}", encoding.name());
+        seeds.extend(found.into_iter().map(|bytes| (encoding, bytes)));
+    }
+    seeds.extend([
+        (UTF_8, b"\xEF\xBB\xBFa\xC3\xA9\xE2\x82\xAC\xF0\x9F\x98\x80".to_vec()),
+        (UTF_16LE, b"\xFF\xFEa\x00\xAC\x20\x3D\xD8\x00\xDE".to_vec()),
+        (UTF_16BE, b"\xFE\xFF\x00a\x20\xAC\xD8\x3D\xDE\x00".to_vec()),
+        (GBK, b"\x80a\x81\x35\xF4\x37\xC4\xE3".to_vec()),
+        (GB18030, encode("a\u{180}\u{1F600}\u{4E2D}", GB18030).expect("encodable")),
+        (BIG5, b"\x88\x62a\x88\x64\xA4\x40".to_vec()),
+        (SHIFT_JIS, b"\xB1a\x82\xA0\x80".to_vec()),
+        (EUC_JP, b"\x8F\xB0\xA1a\x8E\xB6\xA4\xA2".to_vec()),
+        (ISO_2022_JP, b"\x1B(I12\x1B(Ba".to_vec()),
+        (ISO_2022_JP, b"\x1B(J\\~\x1B$B$3\x1B(B".to_vec()),
+        // Deleting the a leaves two escape sequences in a row.
+        (ISO_2022_JP, b"x\x1B(Ja\x1B(B".to_vec()),
+        (X_USER_DEFINED, b"a\x80\xFF".to_vec()),
+    ]);
+    seeds
+}
+
+/// The decoding data: hashes of what encoding_rs gives for groups of
+/// inputs, a prefix followed by every sequence of one or two bytes, and for
+/// the mutations of seeds, with the text of each seed.
+fn decodes(texts: &[&str]) -> String {
+    let mut groups: Vec<(&'static Encoding, Vec<u8>, usize)> =
+        ALL.iter().map(|&e| (e, Vec::new(), 1)).collect();
+    groups.extend([
+        (UTF_8, vec![], 2),
+        (UTF_8, vec![0xED], 2),
+        (UTF_16BE, vec![], 2),
+        (UTF_16BE, vec![0xDB, 0xFF], 2),
+        (UTF_16LE, vec![], 2),
+        (UTF_16LE, vec![0x00, 0xD8], 2),
+        (GBK, vec![], 2),
+        (GB18030, vec![0x81, 0x30], 2),
+        (GB18030, vec![0xE3, 0x32], 2),
+        (BIG5, vec![], 2),
+        (SHIFT_JIS, vec![], 2),
+        (EUC_JP, vec![], 2),
+        (EUC_JP, vec![0x8F], 2),
+        (ISO_2022_JP, vec![], 2),
+        (ISO_2022_JP, vec![0x1B], 2),
+        (ISO_2022_JP, b"\x1B$B".to_vec(), 2),
+        (ISO_2022_JP, b"a\x1B(B\x1B".to_vec(), 2),
+        (EUC_KR, vec![], 2),
+    ]);
+    let mut out = String::new();
+    out.push_str("// Generated by tools/golden from encoding_rs 0.8.42. Do not edit.\n");
+    out.push_str("// What its decoders give for the inputs decode_golden_test.mbt\n");
+    out.push_str("// describes. The first two seeds of each encoding are prefixes of\n");
+    out.push_str("// sentences from Tatoeba (https://tatoeba.org), CC BY 2.0 FR, encoded.\n");
+    out.push_str("// See NOTICE.\n\n");
+    writeln!(out, "///|\n/// The bytes the mutations of the seeds put in.").unwrap();
+    writeln!(out, "let decode_alphabet : Bytes = {}\n", bytes_literal(DECODE_ALPHABET)).unwrap();
+    out.push_str("///|\n/// (encoding, prefix, n, hash): the hash of what decoding gives for the\n");
+    out.push_str("/// prefix followed by each sequence of n bytes, in order.\n");
+    out.push_str("let decode_groups : Array[(String, Bytes, Int, UInt64)] = [\n");
+    for (encoding, prefix, n) in &groups {
+        let mut hash = Fnv::new();
+        let mut input = prefix.clone();
+        input.resize(prefix.len() + n, 0);
+        for suffix in 0..1usize << (8 * n) {
+            for i in 0..*n {
+                input[prefix.len() + i] = (suffix >> (8 * (n - 1 - i))) as u8;
+            }
+            hash_decode(encoding, &input, &mut hash);
+        }
+        writeln!(
+            out,
+            "  ({}, {}, {}, {}UL),",
+            string_literal(encoding.name()),
+            bytes_literal(prefix),
+            n,
+            hash.0
+        )
+        .unwrap();
+    }
+    out.push_str("]\n\n");
+    out.push_str("///|\n/// (encoding, seed, its text, the hash of what decoding gives for each of\n");
+    out.push_str("/// its mutations with decode_alphabet, in order).\n");
+    out.push_str("let decode_seeds : Array[(String, Bytes, String, UInt64)] = [\n");
+    let seeds = decode_seeds(texts);
+    let mut total = 0;
+    for (encoding, seed) in &seeds {
+        let text = decode(encoding, seed).expect("seeds decode");
+        let mut hash = Fnv::new();
+        let mutated = mutations(seed, DECODE_ALPHABET);
+        total += mutated.len();
+        for input in &mutated {
+            hash_decode(encoding, input, &mut hash);
+        }
+        writeln!(
+            out,
+            "  ({}, {}, {}, {}UL),",
+            string_literal(encoding.name()),
+            bytes_literal(seed),
+            string_literal(&text),
+            hash.0
+        )
+        .unwrap();
+    }
+    out.push_str("]\n");
+    eprintln!("{} decoding groups, {} seeds, {} mutations", groups.len(), seeds.len(), total);
+    out
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() != 6 {
-        eprintln!("usage: mbchardet-golden CORPUS_TSV SCORES_MBT TRACES_MBT ENCODINGS_JSON LABELS_MBT");
+    if args.len() != 7 {
+        eprintln!(
+            "usage: mbchardet-golden CORPUS_TSV SCORES_MBT TRACES_MBT ENCODINGS_JSON LABELS_MBT DECODE_MBT"
+        );
         std::process::exit(2);
     }
     fs::write(&args[5], labels(&args[4])).expect("cannot write the labels");
     fs::write(&args[3], traces()).expect("cannot write the traces");
     let corpus = fs::read_to_string(&args[1]).expect("cannot read the corpus");
+    let texts: Vec<&str> = corpus
+        .lines()
+        .filter(|line| !line.starts_with('#') && !line.is_empty())
+        .map(|line| line.split('\t').nth(2).expect("three fields"))
+        .collect();
+    fs::write(&args[6], decodes(&texts)).expect("cannot write the decoding data");
     let mut inputs: Vec<(String, Vec<u8>)> = Vec::new();
     for line in corpus.lines() {
         if line.starts_with('#') || line.is_empty() {

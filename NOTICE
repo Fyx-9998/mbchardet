@@ -4,8 +4,9 @@ Licensed under the Apache License, Version 2.0 (LICENSE-APACHE) or the MIT
 license (LICENSE-MIT), at your option, except these files, which hold data
 of others under their licenses (see below):
 
-  - cjk_index_data.mbt, label_data.mbt and golden_labels_test.mbt: the BSD
-    3-Clause License of the WHATWG (LICENSE-WHATWG).
+  - cjk_index_data.mbt, single_byte_index_data.mbt, label_data.mbt and
+    golden_labels_test.mbt: the BSD 3-Clause License of the WHATWG
+    (LICENSE-WHATWG).
   - prescan_data_test.mbt: the MIT License of html5lib-tests
     (LICENSE-HTML5LIB-TESTS) and the BSD 3-Clause License of
     web-platform-tests (LICENSE-WPT).
@@ -76,6 +77,13 @@ encoding_rs 0.8.42
   answer, and golden_labels_test.mbt the encoding that Encoding::for_label
   of encoding_rs finds for each input, both produced by tools/golden.
 
+  decode.mbt reports the first malformed sequence of an input where
+  decode_to_string_without_replacement of encoding_rs 0.8.42 reports it,
+  including which of two ISO-2022-JP escape sequences in a row is in error,
+  and removes a byte order mark as its new_decoder_with_bom_removal does.
+  No code is copied. decode_data_test.mbt holds hashes of what the
+  encoding_rs decoders give, produced by tools/golden.
+
 WHATWG Encoding Standard
   https://encoding.spec.whatwg.org/
   Copyright © WHATWG (Apple, Google, Mozilla, Microsoft).
@@ -83,7 +91,11 @@ WHATWG Encoding Standard
   cjk_index_data.mbt is written by tools/gen_index.py from index-gb18030.txt,
   index-gb18030-ranges.txt, index-big5.txt, index-jis0208.txt,
   index-jis0212.txt and index-euc-kr.txt of whatwg/encoding commit
-  2c3853e461afd718be198772170d024e427aee21, without changes to the mappings.
+  2c3853e461afd718be198772170d024e427aee21, without changes to the mappings,
+  and single_byte_index_data.mbt from the index files of the 27 single-byte
+  encodings of the same commit, also without changes. decode.mbt implements
+  the shared UTF-16 decoder, the single-byte decoder and the x-user-defined
+  decoder with the error mode "fatal".
   label_data.mbt is written by tools/gen_labels.py from encodings.json of the
   same commit, without changes to the labels, which golden_labels_test.mbt
   also holds. The standard is licensed under CC BY 4.0; its portions
@@ -157,7 +169,9 @@ Tatoeba
   (Romanian cedillas, Vietnamese tone marks for windows-1258, Hebrew in
   reverse order, simplified Chinese chosen as text Big5 cannot represent).
   golden_data_test.mbt contains these sentences encoded in UTF-8, the CJK
-  encodings and single-byte encodings. README.mbt.md and
+  encodings and single-byte encodings, and decode_data_test.mbt prefixes of
+  some of them encoded in the encodings of the Encoding Standard, with their
+  text. README.mbt.md and
   cmd/main/main_wbtest.mbt quote some of them with their ids.
 
 Tools

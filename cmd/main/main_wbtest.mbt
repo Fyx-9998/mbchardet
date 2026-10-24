@@ -8,7 +8,14 @@ fn defaults() -> Settings {
     allow_utf8: true,
     allow_iso_2022_jp: true,
     scores: false,
+    output: None,
   }
+}
+
+///|
+/// The lines printed for the file `path` that holds `data`.
+fn report(path : String, data : Bytes, settings : Settings) -> Array[String] {
+  examine(path, data, settings).0
 }
 
 ///|
@@ -273,4 +280,82 @@ test "XML files" {
   // Without a declaration, UTF-8, whatever the bytes: XML is not guessed.
   assert_eq(report("sk.xml", slovak, xml), ["sk.xml: UTF-8 (default)"])
   assert_eq(report("e.xml", b"", xml), ["e.xml: UTF-8 (default)"])
+}
+
+///|
+test "parse_args with --output" {
+  assert_eq(
+    parse_args(argv=["--output", "out.txt", "a.txt"]).output,
+    Some("out.txt"),
+  )
+  assert_eq(parse_args(argv=["-o", "out.txt", "a.txt"]).output, Some("out.txt"))
+  assert_eq(parse_args(argv=["a.txt"]).output, None)
+}
+
+///|
+test "parse_args takes one file with --output, as text" {
+  try parse_args(argv=["-o", "out.txt", "a.txt", "b.txt"]) catch {
+    error =>
+      assert_eq(
+        error.to_string(),
+        "error: --output takes the text of one file; got 2 files",
+      )
+  } noraise {
+    _ => fail("two files were accepted")
+  }
+  // A converted document would still declare its old encoding.
+  for argv in [["--html", "-o", "out", "a"], ["--xml", "-o", "out", "a"]] {
+    try parse_args(argv~) catch {
+      error =>
+        assert_true(
+          error.to_string().has_prefix("error: conflicting arguments: "),
+        )
+    } noraise {
+      _ => fail("\{argv.join(" ")} was accepted")
+    }
+  }
+}
+
+///|
+test "examine gives the encoding it reports" {
+  let (lines, encoding) = examine("sk.txt", slovak, {
+    ..defaults(),
+    tld: Some("sk"),
+  })
+  assert_eq(lines, ["sk.txt: windows-1250"])
+  assert_eq(encoding, Windows1250)
+}
+
+///|
+test "convert gives UTF-8, or the bytes in error" {
+  assert_eq(
+    convert(slovak, Windows1250),
+    Ok(@utf8.encode("Keď som ju uvidel, zamrelo mi srdce.")),
+  )
+  // こん in Shift_JIS
+  assert_eq(convert(b"\x82\xB1\x82\xF1", ShiftJis), Ok(@utf8.encode("こん")))
+  // No byte order mark is written.
+  assert_eq(convert(b"\xFF\xFEa\x00", Utf16Le), Ok(b"a"))
+  assert_eq(convert(b"\xEF\xBB\xBFa", Utf8), Ok(b"a"))
+  assert_eq(
+    convert(b"\xC4\xE3\xC4 ", Gbk),
+    Err("invalid GBK: malformed sequence of 1 byte at offset 2 (C4)"),
+  )
+  assert_eq(
+    convert(b"ok\xE1\x80!", Utf8),
+    Err("invalid UTF-8: malformed sequence of 2 bytes at offset 2 (E1 80)"),
+  )
+  assert_eq(
+    convert(b"ok\xE1\x80", Utf8),
+    Err(
+      "invalid UTF-8: input ends inside a sequence that starts at offset 2 (E1 80)",
+    ),
+  )
+  // No byte is in error: the encoding decodes no input.
+  assert_eq(
+    convert(b"x", Replacement),
+    Err(
+      "not decoded: the replacement encoding stands for ISO-2022-KR, ISO-2022-CN and HZ-GB-2312, whose content the Encoding Standard does not decode",
+    ),
+  )
 }

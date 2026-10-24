@@ -89,6 +89,8 @@ jobs:
           printf '\x1B$B$3$s$K$A$O\x1B(B' > cli-samples/jis.txt
           printf '<meta charset="Shift_JIS"><p>\x82\xB1\x82\xF1</p>' > cli-samples/page.html
           printf '<?xml version="1.0" encoding="windows-1251"?>\n<rss/>' > cli-samples/feed.xml
+          printf 'Ke\xC4\x8F som ju uvidel, zamrelo mi srdce.' > cli-samples/sk.utf8.expected
+          printf 'ok \x81\x20 bad' > cli-samples/bad.txt
           printf '%s\n' \
             'cli-samples/sk.txt: ISO-8859-4' \
             'cli-samples/bom.csv: UTF-8 (byte order mark)' \
@@ -99,9 +101,12 @@ jobs:
             'cli-samples/sk.txt: windows-1250 (--charset)' \
             'cli-samples/page.html: Shift_JIS (declared)' \
             'cli-samples/feed.xml: windows-1251 (declared)' \
-            'cli-samples/feed.xml: KOI8-R (--charset)' > cli-samples/expected
+            'cli-samples/feed.xml: KOI8-R (--charset)' \
+            'cli-samples/sk.txt: windows-1250' \
+            'cli-samples/sk.utf8.txt: UTF-8 (converted from cli-samples/sk.txt)' > cli-samples/expected
           for target in wasm wasm-gc js native; do
             echo "::group::$target"
+            rm -f cli-samples/sk.utf8.txt cli-samples/bad.utf8.txt
             {
               moon run cmd/main --target "$target" -- cli-samples/sk.txt \
                 cli-samples/bom.csv cli-samples/ascii.txt cli-samples/jis.txt
@@ -111,8 +116,20 @@ jobs:
               moon run cmd/main --target "$target" -- --html cli-samples/page.html
               moon run cmd/main --target "$target" -- --xml cli-samples/feed.xml
               moon run cmd/main --target "$target" -- --xml --charset koi8-r cli-samples/feed.xml
+              moon run cmd/main --target "$target" -- --tld sk -o cli-samples/sk.utf8.txt cli-samples/sk.txt
             } > cli-samples/actual
             diff --strip-trailing-cr cli-samples/expected cli-samples/actual
+            cmp cli-samples/sk.utf8.expected cli-samples/sk.utf8.txt
+            # A file that is not valid in its encoding is not converted, with
+            # exit status 1.
+            status=0
+            moon run cmd/main --target "$target" -- --charset gbk -o cli-samples/bad.utf8.txt \
+              cli-samples/bad.txt > cli-samples/error 2>&1 || status=$?
+            cat cli-samples/error
+            test "$status" -eq 1
+            grep -q "cli-samples/bad.txt: error: invalid GBK: malformed sequence of 1 byte at offset 3 (81)" \
+              cli-samples/error
+            test ! -e cli-samples/bad.utf8.txt
             # A file that cannot be read is reported, with exit status 1.
             status=0
             moon run cmd/main --target "$target" -- cli-samples/missing.txt \
@@ -142,17 +159,22 @@ jobs:
       - name: Download the WHATWG Encoding Standard files
         run: |
           mkdir -p "$RUNNER_TEMP/whatwg"
-          for f in encodings.json index-gb18030.txt index-gb18030-ranges.txt \
-                   index-big5.txt index-jis0208.txt index-jis0212.txt index-euc-kr.txt; do
-            curl -fsSL -o "$RUNNER_TEMP/whatwg/$f" \
-              "https://raw.githubusercontent.com/whatwg/encoding/2c3853e461afd718be198772170d024e427aee21/$f"
+          base=https://raw.githubusercontent.com/whatwg/encoding/2c3853e461afd718be198772170d024e427aee21
+          curl -fsSL -o "$RUNNER_TEMP/whatwg/encodings.json" "$base/encodings.json"
+          for f in gb18030 gb18030-ranges big5 jis0208 jis0212 euc-kr ibm866 \
+                   iso-8859-2 iso-8859-3 iso-8859-4 iso-8859-5 iso-8859-6 iso-8859-7 \
+                   iso-8859-8 iso-8859-10 iso-8859-13 iso-8859-14 iso-8859-15 \
+                   iso-8859-16 koi8-r koi8-u macintosh windows-874 windows-1250 \
+                   windows-1251 windows-1252 windows-1253 windows-1254 windows-1255 \
+                   windows-1256 windows-1257 windows-1258 x-mac-cyrillic; do
+            curl -fsSL -o "$RUNNER_TEMP/whatwg/index-$f.txt" "$base/index-$f.txt"
           done
 
       - name: Regenerate the golden data with chardetng 1.0.0 and encoding_rs 0.8.42
         run: |
           cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- \
             tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt \
-            "$RUNNER_TEMP/whatwg/encodings.json" golden_labels_test.mbt
+            "$RUNNER_TEMP/whatwg/encodings.json" golden_labels_test.mbt decode_data_test.mbt
 
       - name: Regenerate the tables from chardetng's data.rs
         run: |
@@ -160,9 +182,9 @@ jobs:
             | python3 -c 'import json, sys; print(next(p["manifest_path"] for p in json.load(sys.stdin)["packages"] if p["name"] == "chardetng"))')
           python3 tools/gen_data.py "$(dirname "$manifest")/src" detector_data.mbt
 
-      - name: Regenerate the CJK tables and the labels from the WHATWG files
+      - name: Regenerate the decoding tables and the labels from the WHATWG files
         run: |
-          python3 tools/gen_index.py "$RUNNER_TEMP/whatwg" cjk_index_data.mbt
+          python3 tools/gen_index.py "$RUNNER_TEMP/whatwg" cjk_index_data.mbt single_byte_index_data.mbt
           python3 tools/gen_labels.py "$RUNNER_TEMP/whatwg/encodings.json" label_data.mbt
 
       - name: Regenerate the prescan data with html-encoding-sniffer 7.0.0
@@ -206,8 +228,10 @@ jobs:
             golden_data_test.mbt
             golden_trace_wbtest.mbt
             golden_labels_test.mbt
+            decode_data_test.mbt
             detector_data.mbt
             cjk_index_data.mbt
+            single_byte_index_data.mbt
             label_data.mbt
             prescan_data_test.mbt
             xml_data_test.mbt
