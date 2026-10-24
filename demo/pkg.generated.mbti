@@ -1,0 +1,17 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "Fyx-9998/mbchardet/demo"
+
+// Values
+pub fn decode_as(Bytes, String) -> String
+
+pub fn encoding_names() -> String
+
+pub fn examine(Bytes, String, String, String, Bool, Bool) -> String
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits

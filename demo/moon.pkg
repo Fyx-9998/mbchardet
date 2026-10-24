@@ -1,0 +1,16 @@
+import {
+  "Fyx-9998/mbchardet",
+}
+
+import {
+  "moonbitlang/core/json",
+} for "test"
+
+options(
+  link: {
+    "js": {
+      "exports": [ "examine", "decode_as", "encoding_names" ],
+      "format": "esm",
+    },
+  },
+)

@@ -12,7 +12,8 @@ prescan of the HTML Standard finds the encoding a document declares, and
 `sniff_html` and `sniff_xml` find the encoding of a whole document in the
 order the HTML Standard and XML 1.0 give. `Encoding::decode` turns bytes into
 text and refuses, instead of replacing, a byte sequence that is not valid in
-the encoding; the command-line tool can write the text in UTF-8.
+the encoding; the command-line tool can write the text in UTF-8, and a
+browser demo shows the encoding, the scores and the text of a file.
 
 Implemented:
 
@@ -102,6 +103,10 @@ Implemented:
   deny UTF-8 or ISO-2022-JP, and list the scores. `--output` writes a file
   in UTF-8, unless a byte sequence in it is not valid in the encoding found.
   See [Command line](#command-line).
+- A browser demo (`demo/`): open a file, or one of the samples, and see its
+  encoding, the step that decided, the detector's scores and the text, and
+  download the text in UTF-8. The `demo` package compiles to JavaScript.
+  See [Browser demo](#browser-demo).
 - `Encoding`: the 40 encodings of the Encoding Standard, with `name()`
   giving the canonical name (`"UTF-8"`, `"windows-1251"`, ...) and
   `Encoding::all()`. These names are valid labels for any decoder that
@@ -114,9 +119,8 @@ Implemented:
   and `sniff_bom` only report the first 28 encodings, up to `Ibm866`; the
   others only come from labels.
 
-Planned, not implemented yet:
-
-- A browser demo.
+Not done yet: the demo is not published as a website. CI builds it on
+every push and keeps it with the run.
 
 ## Usage
 
@@ -563,9 +567,37 @@ converted or cannot be written makes the exit status 1, and an invalid
 command line makes it 2; unknown options, options that do not go together
 and a missing file name also print the help text.
 
+## Browser demo
+
+`demo/index.html` runs mbchardet in the browser. Open a file, drop one on
+the page or pick a sample, and it shows:
+
+- the encoding, with the step that decided, as the command-line tool finds
+  it for text, HTML or XML, with the same options;
+- the text, decoded with `Encoding::decode`, or where the first malformed
+  byte sequence is, with the bytes around it;
+- the detector's scores, highest first, and the encodings it ruled out.
+  Choosing one of them, or any of the 40 encodings from a list, decodes the
+  file with it instead.
+
+A button downloads the text in UTF-8, as `--output` writes it. The file is
+read in the page and not uploaded. The `demo` package compiles to
+JavaScript and exports `examine`, `decode_as` and `encoding_names`, which
+return JSON; `demo/app.js` shows what they return. To build and serve it:
+
+```
+node tools/build_demo.mjs _site
+python -m http.server -d _site
+```
+
+and open <http://localhost:8000>. `tools/check_demo.mjs` checks the built
+module in Node. CI builds the demo on every push, runs that check, and
+keeps the page as an artifact named `demo`.
+
 ## Testing
 
-`moon test` runs unit tests, tests of the command-line tool, and golden
+`moon test` runs unit tests, tests of the command-line tool and of the
+functions of the demo, and golden
 tests against data that chardetng, encoding_rs, html-encoding-sniffer and
 expat themselves produced. The data and the tables are generated, and CI
 checks that regenerating them gives the committed files:

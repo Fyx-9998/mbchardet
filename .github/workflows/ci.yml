@@ -140,6 +140,37 @@ jobs:
             echo "::endgroup::"
           done
 
+  demo:
+    name: Browser demo
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+
+      # The build compiles every package, the command-line tool's too.
+      - name: Fetch the registry index
+        run: moon update
+
+      - name: Build the demo
+        run: node tools/build_demo.mjs _site
+
+      - name: Check the compiled module
+        run: node tools/check_demo.mjs _site
+
+      - name: Keep the demo
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: demo
+          path: _site
+
   generated-data:
     name: Generated data
     runs-on: ubuntu-24.04
