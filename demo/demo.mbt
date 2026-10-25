@@ -28,26 +28,15 @@ fn decoded_json(data : Bytes, encoding : @mbchardet.Encoding) -> Json {
 /// The scores of the detector, highest first and in the order of
 /// `Detector::encodings()` when equal, and the encodings it ruled out.
 fn scores_json(detector : @mbchardet.Detector) -> (Json, Json) {
-  let scored = []
-  let ruled_out = []
-  for i, encoding in @mbchardet.Detector::encodings() {
-    match detector.score(encoding) {
-      Some(score) => scored.push((i, encoding, score))
-      None => ruled_out.push(Json::string(encoding.name()))
-    }
-  }
-  scored.sort_by((a, b) => {
-    let by_score = b.2.compare(a.2)
-    if by_score != 0 {
-      by_score
-    } else {
-      a.0.compare(b.0)
-    }
-  })
-  let scores : Array[Json] = scored.map(entry => {
-    "encoding": Json::string(entry.1.name()),
-    "score": Json::number(entry.2.to_double()),
-  })
+  let scores : Array[Json] = detector
+    .scores()
+    .map(entry => {
+      "encoding": Json::string(entry.0.name()),
+      "score": Json::number(entry.1.to_double()),
+    })
+  let ruled_out = @mbchardet.Detector::encodings()
+    .filter(encoding => detector.score(encoding) is None)
+    .map(encoding => Json::string(encoding.name()))
   (Json::array(scores), Json::array(ruled_out))
 }
 
@@ -72,9 +61,9 @@ fn problem(charset : String, tld : String) -> String? {
 /// What the page shows for the file `data`, as a JSON string.
 ///
 /// `mode` is `"html"` or `"xml"` to find the encoding as `sniff_html` or
-/// `sniff_xml` does, anything else for plain text: a byte order mark, then
-/// `charset`, then the guess. `charset` and `tld` are empty when not given;
-/// an empty `charset` is no label.
+/// `sniff_xml` does, anything else for plain text, as `sniff_text` does: a
+/// byte order mark, then `charset`, then the guess. `charset` and `tld` are
+/// empty when not given; an empty `charset` is no label.
 ///
 /// The result has `problem`, a message when an option cannot be used and
 /// null otherwise. Without a problem, it also has `encoding`, its name;
@@ -96,6 +85,7 @@ pub fn examine(
     return result.stringify()
   }
   let tld = if tld == "" { None } else { Some(tld.to_lower()) }
+  // The detector whose scores the page shows. XML is not guessed.
   let detector = if mode == "xml" {
     None
   } else {
@@ -113,16 +103,14 @@ pub fn examine(
         allow_iso_2022_jp~,
       )
     "xml" => @mbchardet.sniff_xml(data[:], charset~)
-    // Plain text, as the command-line tool finds its encoding.
     _ =>
-      if @mbchardet.sniff_bom(data[:]) is Some((encoding, _)) {
-        { encoding, source: ByteOrderMark, }
-      } else if @mbchardet.Encoding::from_label(charset) is Some(encoding) {
-        { encoding, source: TransportLayer, }
-      } else {
-        let encoding = detector.unwrap().guess(tld?, allow_utf8~)
-        { encoding, source: Detection, }
-      }
+      @mbchardet.sniff_text(
+        data[:],
+        charset~,
+        tld?,
+        allow_utf8~,
+        allow_iso_2022_jp~,
+      )
   }
   let source = match sniffed.source {
     ByteOrderMark => "bom"

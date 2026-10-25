@@ -4,7 +4,7 @@
 ///|
 /// What the files are, which decides the steps that find their encoding.
 priv enum Kind {
-  /// Any text: a byte order mark, `--charset`, then the guess.
+  /// Any text: `sniff_text`.
   Text
   /// HTML: `sniff_html`.
   Html
@@ -160,65 +160,19 @@ fn parse_args(argv? : ArrayView[String]) -> Settings raise {
 /// One line for each encoding the detector scores, highest score first, and
 /// one that lists the encodings ruled out.
 fn score_lines(detector : @mbchardet.Detector) -> Array[String] {
-  let scored = []
-  let ruled_out = []
-  for i, encoding in @mbchardet.Detector::encodings() {
-    match detector.score(encoding) {
-      Some(score) => scored.push((i, encoding, score))
-      None => ruled_out.push(encoding.name())
-    }
-  }
-  // Equal scores keep the order of Detector::encodings(), which is that of
-  // Encoding::all().
-  scored.sort_by((a, b) => {
-    let by_score = b.2.compare(a.2)
-    if by_score != 0 {
-      by_score
-    } else {
-      a.0.compare(b.0)
-    }
-  })
-  let lines = scored.map(entry => {
-    let name = entry.1.name()
-    "  \{name}\{" ".repeat(14 - name.length())}\{entry.2}"
-  })
+  let lines = detector
+    .scores()
+    .map(entry => {
+      let name = entry.0.name()
+      "  \{name}\{" ".repeat(14 - name.length())}\{entry.1}"
+    })
+  let ruled_out = @mbchardet.Detector::encodings()
+    .filter(encoding => detector.score(encoding) is None)
+    .map(encoding => encoding.name())
   if ruled_out.length() > 0 {
     lines.push("  ruled out: \{ruled_out.join(", ")}")
   }
   lines
-}
-
-///|
-/// A detector that has been fed `data`, created as `settings` say.
-fn detector_for(data : Bytes, settings : Settings) -> @mbchardet.Detector {
-  let detector = @mbchardet.Detector::new(
-    allow_iso_2022_jp=settings.allow_iso_2022_jp,
-  )
-  detector.feed(data[:], last=true) |> ignore
-  detector
-}
-
-///|
-/// The encoding of `data` and the step that decided, for any text: a byte
-/// order mark, then `--charset`, then the guess. With the guess, the
-/// detector that made it.
-fn sniff_text(
-  data : Bytes,
-  settings : Settings,
-) -> (@mbchardet.Sniffed, @mbchardet.Detector?) {
-  if @mbchardet.sniff_bom(data[:]) is Some((encoding, _)) {
-    return ({ encoding, source: ByteOrderMark, }, None)
-  }
-  if settings.charset is Some(label) &&
-    @mbchardet.Encoding::from_label(label) is Some(encoding) {
-    return ({ encoding, source: TransportLayer, }, None)
-  }
-  let detector = detector_for(data, settings)
-  let encoding = detector.guess(
-    tld?=settings.tld,
-    allow_utf8=settings.allow_utf8,
-  )
-  ({ encoding, source: Detection, }, Some(detector))
 }
 
 ///|
@@ -230,19 +184,24 @@ fn examine(
   settings : Settings,
 ) -> (Array[String], @mbchardet.Encoding) {
   let charset = settings.charset.map(label => label[:])
-  let (sniffed, detector) = match settings.kind {
-    Text => sniff_text(data, settings)
-    Html => {
-      let sniffed = @mbchardet.sniff_html(
+  let sniffed = match settings.kind {
+    Text =>
+      @mbchardet.sniff_text(
         data[:],
         charset?,
         tld?=settings.tld,
         allow_utf8=settings.allow_utf8,
         allow_iso_2022_jp=settings.allow_iso_2022_jp,
       )
-      (sniffed, None)
-    }
-    Xml => (@mbchardet.sniff_xml(data[:], charset?), None)
+    Html =>
+      @mbchardet.sniff_html(
+        data[:],
+        charset?,
+        tld?=settings.tld,
+        allow_utf8=settings.allow_utf8,
+        allow_iso_2022_jp=settings.allow_iso_2022_jp,
+      )
+    Xml => @mbchardet.sniff_xml(data[:], charset?)
   }
   let { encoding, source, } = sniffed
   let note = match source {
@@ -262,11 +221,12 @@ fn examine(
   }
   let lines = ["\{path}: \{encoding}\{note}"]
   if settings.scores && source == Detection {
-    // sniff_html does not hand out its detector, so --html feeds another.
-    let detector = match detector {
-      Some(detector) => detector
-      None => detector_for(data, settings)
-    }
+    // The sniffing functions keep their detector, so the scores come from
+    // another, fed the same way.
+    let detector = @mbchardet.Detector::new(
+      allow_iso_2022_jp=settings.allow_iso_2022_jp,
+    )
+    detector.feed(data[:], last=true) |> ignore
     lines.append(score_lines(detector))
   }
   (lines, encoding)

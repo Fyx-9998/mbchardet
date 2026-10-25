@@ -16,6 +16,23 @@ fn html(
 }
 
 ///|
+fn text(
+  data : Bytes,
+  charset? : String,
+  tld? : String,
+  allow_utf8? : Bool,
+  allow_iso_2022_jp? : Bool,
+) -> @mbchardet.Sniffed {
+  @mbchardet.sniff_text(
+    data[:],
+    charset?=charset.map(label => label[:]),
+    tld?,
+    allow_utf8?,
+    allow_iso_2022_jp?,
+  )
+}
+
+///|
 fn xml(document : Bytes, charset? : String) -> @mbchardet.Sniffed {
   @mbchardet.sniff_xml(document[:], charset?=charset.map(label => label[:]))
 }
@@ -275,4 +292,78 @@ test "sniff_xml: an XHTML document" {
   let page = b"<?xml version=\"1.0\" encoding=\"iso-8859-2\"?>\n<html xmlns=\"http://www.w3.org/1999/xhtml\"><head><meta charset=\"gbk\"/>"
   assert_eq(xml(page), { encoding: Iso8859_2, source: XmlDeclaration, })
   assert_eq(html(page), { encoding: Gbk, source: Prescan, })
+}
+
+///|
+test "sniff_text: a byte order mark, then the transport layer" {
+  let marked = b"\xEF\xBB\xBFname,city\n"
+  assert_eq(text(marked), { encoding: Utf8, source: ByteOrderMark, })
+  assert_eq(text(marked, charset="Shift_JIS"), {
+    encoding: Utf8,
+    source: ByteOrderMark,
+  })
+  assert_eq(text(b"\xFE\xFF\x00a", charset="gbk"), {
+    encoding: Utf16Be,
+    source: ByteOrderMark,
+  })
+  assert_eq(text(slovak, charset=" Latin2 "), {
+    encoding: Iso8859_2,
+    source: TransportLayer,
+  })
+  assert_eq(text(slovak, charset="utf-16"), {
+    encoding: Utf16Le,
+    source: TransportLayer,
+  })
+  // A string that is no label counts as none.
+  assert_eq(text(slovak, charset="bogus", tld="sk"), {
+    encoding: Windows1250,
+    source: Detection,
+  })
+}
+
+///|
+test "sniff_text: then the detector, without reading declarations" {
+  assert_eq(text(slovak), { encoding: Iso8859_4, source: Detection, })
+  assert_eq(text(slovak, tld="sk"), {
+    encoding: Windows1250,
+    source: Detection,
+  })
+  // A <meta> or an XML declaration is only text.
+  let page = b"<meta charset=\"koi8-r\">" + slovak
+  assert_eq(html(page, tld="sk"), { encoding: Koi8R, source: Prescan, })
+  assert_eq(text(page, tld="sk"), { encoding: Windows1250, source: Detection, })
+  let feed = b"<?xml version=\"1.0\" encoding=\"koi8-r\"?>" + slovak
+  assert_eq(xml(feed), { encoding: Koi8R, source: XmlDeclaration, })
+  assert_eq(text(feed, tld="sk"), { encoding: Windows1250, source: Detection, })
+}
+
+///|
+test "sniff_text: the options of the detector" {
+  // こんにちは in ISO-2022-JP
+  let jis = b"\x1B$B$3$s$K$A$O\x1B(B"
+  assert_eq(text(jis), { encoding: Iso2022Jp, source: Detection, })
+  assert_eq(text(jis, allow_iso_2022_jp=false), {
+    encoding: Utf8,
+    source: Detection,
+  })
+  assert_eq(text(jis, allow_utf8=false, allow_iso_2022_jp=false), {
+    encoding: Windows1252,
+    source: Detection,
+  })
+  // The same guesses as a Detector fed with the whole input makes.
+  let german = b"Gr\xC3\xBC\xC3\x9Fe" // "Grüße" in UTF-8
+  for data in [slovak, jis, german, b"", b"plain"] {
+    for tld in [None, Some("cz"), Some("jp")] {
+      for allow_utf8 in [true, false] {
+        for allow_iso_2022_jp in [true, false] {
+          let detector = @mbchardet.Detector::new(allow_iso_2022_jp~)
+          detector.feed(data[:], last=true) |> ignore
+          assert_eq(text(data, tld?, allow_utf8~, allow_iso_2022_jp~), {
+            encoding: detector.guess(tld?, allow_utf8~),
+            source: Detection,
+          })
+        }
+      }
+    }
+  }
 }

@@ -1,7 +1,7 @@
-// Compares Detector::score and Detector::guess with what chardetng 1.0.0
-// computes for the inputs in golden_data_test.mbt, and Encoding::from_label
-// with what encoding_rs 0.8.42 finds for those in golden_labels_test.mbt,
-// both written by tools/golden.
+// Compares Detector::score, Detector::scores and Detector::guess with what
+// chardetng 1.0.0 computes for the inputs in golden_data_test.mbt, and
+// Encoding::from_label with what encoding_rs 0.8.42 finds for those in
+// golden_labels_test.mbt, both written by tools/golden.
 
 ///|
 fn golden_encoding(name : String) -> @mbchardet.Encoding {
@@ -89,6 +89,45 @@ fn assert_scores(
 }
 
 ///|
+/// Checks that `ranked`, from `Detector::scores`, lists the encodings that
+/// `expected` does not rule out, with the same scores, highest first and in
+/// the order of `Detector::encodings()` when equal.
+fn assert_ranked(
+  label : String,
+  encodings : Array[@mbchardet.Encoding],
+  ranked : Array[(@mbchardet.Encoding, Int64)],
+  expected : String,
+) -> Unit raise {
+  let expected = parse_scores(expected)
+  let pairs = []
+  for i, encoding in encodings {
+    if expected[i] is Some(score) {
+      pairs.push((encoding, score))
+    }
+  }
+  let shown = ranked.map(entry => "\{entry.0} \{entry.1}").join(", ")
+  assert_eq(ranked.length(), pairs.length(), msg="\{label}: \{shown}")
+  for pair in pairs {
+    assert_true(
+      ranked.contains(pair),
+      msg="\{label}: \{pair.0} \{pair.1} not in \{shown}",
+    )
+  }
+  let order = @mbchardet.Detector::encodings()
+  let position = (encoding : @mbchardet.Encoding) => {
+    order.search(encoding).unwrap()
+  }
+  for i in 1..<ranked.length() {
+    let (before, high) = ranked[i - 1]
+    let (after, low) = ranked[i]
+    assert_true(
+      high > low || (high == low && position(before) < position(after)),
+      msg="\{label}: \{shown}",
+    )
+  }
+}
+
+///|
 test "scores match chardetng 1.0.0" {
   let encodings = golden_encodings.map(golden_encoding)
   assert_eq(golden_cases.length(), 396)
@@ -99,6 +138,12 @@ test "scores match chardetng 1.0.0" {
       "whole",
       encodings,
       scores_of(input, encodings, chunk=None, last=true),
+      whole,
+    )
+    assert_ranked(
+      label,
+      encodings,
+      fed(input, chunk=None, last=true).scores(),
       whole,
     )
     assert_scores(

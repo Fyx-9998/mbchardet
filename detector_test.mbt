@@ -60,6 +60,57 @@ test "the encodings a detector scores" {
 }
 
 ///|
+test "scores ranks the encodings not ruled out" {
+  // "Keď som ju uvidel, zamrelo mi srdce.", Tatoeba sentence 9935594
+  // (CC BY 2.0 FR), in windows-1250.
+  let detector = @mbchardet.Detector::new()
+  detector.feed(b"Ke\xEF som ju uvidel, zamrelo mi srdce."[:], last=true)
+  |> ignore
+  // Equal scores keep the order of Detector::encodings().
+  assert_eq(detector.scores(), [
+    (@mbchardet.Iso8859_4, 18L),
+    (@mbchardet.Windows1257, 11L),
+    (@mbchardet.Iso8859_13, 11L),
+    (@mbchardet.Windows1250, 9L),
+    (@mbchardet.Iso8859_2, 9L),
+    (@mbchardet.Windows1252, 4L),
+    (@mbchardet.Windows1254, 0L),
+    (@mbchardet.Windows1258, 0L),
+  ])
+  // A new detector rules out only the encodings that need a word of two
+  // letters, and scores the others 0.
+  let new = @mbchardet.Detector::new()
+  let possible = @mbchardet.Detector::encodings().filter(e => {
+    new.score(e) is Some(_)
+  })
+  assert_eq(new.scores(), possible.map(e => (e, 0L)))
+  assert_true(possible.contains(@mbchardet.Utf8))
+  assert_false(possible.contains(@mbchardet.Windows1251))
+}
+
+///|
+test "scores gives what score gives" {
+  let inputs : Array[Bytes] = [
+    b"", b"Zdravo \xE8\xE5\xEB\xE0 svete", b"x \x81\x98 y", b"Gr\xC3\xBC\xC3\x9Fe",
+    b"\x1B$B$3$s$K$A$O\x1B(B",
+  ]
+  for input in inputs {
+    let detector = @mbchardet.Detector::new()
+    detector.feed(input[:], last=true) |> ignore
+    let ranked = detector.scores()
+    for encoding in @mbchardet.Encoding::all() {
+      let listed = ranked
+        .filter(entry => entry.0 == encoding)
+        .map(entry => entry.1)
+      match detector.score(encoding) {
+        Some(score) => assert_eq(listed, [score])
+        None => assert_eq(listed, [])
+      }
+    }
+  }
+}
+
+///|
 test "ISO-2022-JP can be ruled out from the start" {
   // こんにちは in ISO-2022-JP
   let data = b"\x1B$B$3$s$K$A$O\x1B(B"

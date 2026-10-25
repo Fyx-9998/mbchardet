@@ -368,6 +368,31 @@ pub fn Detector::score(self : Detector, encoding : Encoding) -> Int64? {
 }
 
 ///|
+/// The encodings the stream fed so far has not ruled out, with their scores
+/// as `score` gives them, highest first. Equal scores keep the order of
+/// `Detector::encodings()`. The encodings left out are those ruled out.
+///
+/// The guess is not always the first of them: `guess` also weighs the
+/// top-level domain and applies the rules it lists.
+pub fn Detector::scores(self : Detector) -> Array[(Encoding, Int64)] {
+  let scored = []
+  for i, encoding in Detector::encodings() {
+    if self.score(encoding) is Some(score) {
+      scored.push((i, encoding, score))
+    }
+  }
+  scored.sort_by((a, b) => {
+    let by_score = b.2.compare(a.2)
+    if by_score != 0 {
+      by_score
+    } else {
+      a.0.compare(b.0)
+    }
+  })
+  scored.map(entry => (entry.1, entry.2))
+}
+
+///|
 /// The 26 encodings a detector scores, in the order of `Encoding::all()`:
 /// UTF-8 and the legacy encodings chardetng can guess.
 pub fn Detector::encodings() -> Array[Encoding] {

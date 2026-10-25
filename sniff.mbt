@@ -1,11 +1,11 @@
 // Encoding sniffing for whole documents: the encoding sniffing algorithm
-// of the HTML Standard for HTML, and for XML the order of RFC 7303
-// (section 3.2) followed by the rules of XML 1.0 (section 4.3.3 and
-// appendix F).
+// of the HTML Standard for HTML, its steps that do not read markup for
+// plain text, and for XML the order of RFC 7303 (section 3.2) followed by
+// the rules of XML 1.0 (section 4.3.3 and appendix F).
 
 ///|
-/// The step of encoding sniffing that decided, as `sniff_html` and
-/// `sniff_xml` report it.
+/// The step of encoding sniffing that decided, as `sniff_text`,
+/// `sniff_html` and `sniff_xml` report it.
 ///
 /// The HTML Standard calls the encoding *certain* when a byte order mark or
 /// the transport layer gave it, and *tentative* otherwise: a parser that
@@ -21,15 +21,15 @@ pub(all) enum Source {
   Prescan
   /// The XML declaration (XML only).
   XmlDeclaration
-  /// The guess of the detector (HTML only).
+  /// The guess of the detector (text and HTML).
   Detection
   /// None of the other steps: UTF-8, the default of XML (XML only).
   Default
 } derive(Eq, Debug)
 
 ///|
-/// The encoding that `sniff_html` or `sniff_xml` found, with the step that
-/// decided.
+/// The encoding that `sniff_text`, `sniff_html` or `sniff_xml` found, with
+/// the step that decided.
 pub(all) struct Sniffed {
   encoding : Encoding
   source : Source
@@ -42,6 +42,52 @@ fn transport_encoding(charset : StringView?) -> Encoding? {
     Some(label) => Encoding::from_label(label)
     None => None
   }
+}
+
+///|
+/// The guess of a detector created with `allow_iso_2022_jp` and fed with all
+/// of `bytes`.
+fn detection(
+  bytes : BytesView,
+  tld : String?,
+  allow_utf8 : Bool,
+  allow_iso_2022_jp : Bool,
+) -> Sniffed {
+  let detector = Detector::new(allow_iso_2022_jp~)
+  detector.feed(bytes, last=true) |> ignore
+  { encoding: detector.guess(tld?, allow_utf8~), source: Detection, }
+}
+
+///|
+/// Finds the encoding of plain text, given the text or as much of it as is
+/// available. The first of these steps that applies decides:
+///
+/// 1. A byte order mark, as `sniff_bom` finds it.
+/// 2. `charset`, the encoding label from the transport layer, as for
+///    `sniff_html`.
+/// 3. The guess of a `Detector` fed with all of `bytes`, created with
+///    `allow_iso_2022_jp` and guessing with `tld` and `allow_utf8`.
+///
+/// These are the steps of `sniff_html` without the prescan: text is not
+/// searched for a declaration. The defaults allow every guess, like those
+/// of `Detector`.
+///
+/// Panics as `Detector::guess` does if `tld` contains an upper-case letter,
+/// a period or a character outside ASCII.
+pub fn sniff_text(
+  bytes : BytesView,
+  charset? : StringView,
+  tld? : String,
+  allow_utf8~ : Bool = true,
+  allow_iso_2022_jp~ : Bool = true,
+) -> Sniffed {
+  if sniff_bom(bytes) is Some((encoding, _)) {
+    return { encoding, source: ByteOrderMark, }
+  }
+  if transport_encoding(charset) is Some(encoding) {
+    return { encoding, source: TransportLayer, }
+  }
+  detection(bytes, tld, allow_utf8, allow_iso_2022_jp)
 }
 
 ///|
@@ -87,9 +133,7 @@ pub fn sniff_html(
   if prescan_html(bytes) is Some(encoding) {
     return { encoding, source: Prescan, }
   }
-  let detector = Detector::new(allow_iso_2022_jp~)
-  detector.feed(bytes, last=true) |> ignore
-  { encoding: detector.guess(tld?, allow_utf8~), source: Detection, }
+  detection(bytes, tld, allow_utf8, allow_iso_2022_jp)
 }
 
 ///|

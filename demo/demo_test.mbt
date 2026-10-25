@@ -135,6 +135,12 @@ test "examine: HTML and XML" {
     } else {
     fail("the declaration was not read")
   }
+  // Plain text is not searched for a declaration. Two characters are too
+  // few for the detector, which guesses windows-1252.
+  guard examine(page)
+    is { "encoding": "windows-1252", "source": "detection", .. } else {
+    fail("a declaration was read in plain text")
+  }
   // Without a declaration, the guess, with the options.
   guard examine(b"<p>" + slovak, mode="html", tld="sk")
     is { "encoding": "windows-1250", "source": "detection", .. } else {

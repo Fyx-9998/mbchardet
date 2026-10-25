@@ -14,6 +14,8 @@ pub fn sniff_bom(BytesView) -> (Encoding, Int32)?
 
 pub fn sniff_html(BytesView, charset? : StringView, tld? : String, allow_utf8? : Bool, allow_iso_2022_jp? : Bool) -> Sniffed
 
+pub fn sniff_text(BytesView, charset? : StringView, tld? : String, allow_utf8? : Bool, allow_iso_2022_jp? : Bool) -> Sniffed
+
 pub fn sniff_xml(BytesView, charset? : StringView) -> Sniffed
 
 pub fn tld_may_affect_guess(String) -> Bool
@@ -35,6 +37,7 @@ pub fn Detector::feed(Self, BytesView, last? : Bool) -> Bool
 pub fn Detector::guess(Self, tld? : String, allow_utf8? : Bool) -> Encoding
 pub fn Detector::new(allow_iso_2022_jp? : Bool) -> Self
 pub fn Detector::score(Self, Encoding) -> Int64?
+pub fn Detector::scores(Self) -> Array[(Encoding, Int64)]
 
 pub(all) enum Encoding {
   Utf8

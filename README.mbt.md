@@ -8,11 +8,12 @@ they can be decoded correctly instead of turning into mojibake.
 
 Early development. The detector, ported from chardetng 1.0.0, scores the
 encodings chardetng detects and guesses between them as chardetng does. The
-prescan of the HTML Standard finds the encoding a document declares, and
+prescan of the HTML Standard finds the encoding a document declares,
 `sniff_html` and `sniff_xml` find the encoding of a whole document in the
-order the HTML Standard and XML 1.0 give. `Encoding::decode` turns bytes into
-text and refuses, instead of replacing, a byte sequence that is not valid in
-the encoding; the command-line tool can write the text in UTF-8, and a
+order the HTML Standard and XML 1.0 give, and `sniff_text` that of plain
+text in one call. `Encoding::decode` turns bytes into text and refuses,
+instead of replacing, a byte sequence that is not valid in the encoding;
+the command-line tool can write the text in UTF-8, and a
 [browser demo](https://fyx-9998.github.io/mbchardet/) shows the encoding,
 the scores and the text of a file.
 
@@ -34,7 +35,8 @@ Implemented:
   Firefox uses for unlabeled legacy content. Feed it the input in chunks with
   `feed`; `guess()` then returns the most likely encoding, and
   `score(encoding)` tells how plausible the input is in an encoding, or that
-  it is ruled out. It considers UTF-8, GBK (which covers
+  it is ruled out; `scores()` lists the encodings not ruled out with their
+  scores, highest first. It considers UTF-8, GBK (which covers
   GB18030's four-byte sequences), Big5 (with HKSCS), Shift_JIS, EUC-JP,
   ISO-2022-JP, EUC-KR (with the code page 949 extensions) and 19 single-byte
   encodings: windows-874, windows-1250 to windows-1258, ISO-8859-2, -4, -5,
@@ -72,6 +74,10 @@ Implemented:
   (of the jsdom project) for 471,093 variations of 131 short documents,
   except in two cases where html-encoding-sniffer departs from the standard
   (see [Testing](#testing)).
+- `sniff_text(bytes)`: the encoding of plain text in one call, with the
+  step that decided (`Source`): a byte order mark, then the encoding label
+  from the transport layer (`charset`), then the detector's guess. The
+  command-line tool and the browser demo find the encoding of text with it.
 - `sniff_html(bytes)` and `sniff_xml(bytes)`: the encoding of a whole
   document, with the step that decided (`Source`). `sniff_html` follows the
   [encoding sniffing algorithm](https://html.spec.whatwg.org/multipage/parsing.html#encoding-sniffing-algorithm)
@@ -214,6 +220,26 @@ test {
 }
 ```
 
+`scores()` shows how close the call was: it lists the encodings not ruled
+out, highest first, and equal scores keep the order of
+`Detector::encodings()`. The scores ignore the domain, so ISO-8859-4 still
+comes first:
+
+```mbt check
+///|
+test {
+  let data = b"Ke\xEF som ju uvidel, zamrelo mi srdce."
+  let detector = @mbchardet.Detector::new()
+  detector.feed(data[:], last=true) |> ignore
+  let scores = detector.scores()
+  assert_eq(scores[0], (@mbchardet.Iso8859_4, 18L))
+  assert_eq(scores[3], (@mbchardet.Windows1250, 9L))
+  // Encodings for other scripts are ruled out, so they are not listed.
+  assert_eq(detector.score(@mbchardet.Windows1251), None)
+  assert_eq(scores.length(), 8)
+}
+```
+
 Valid UTF-8 is guessed as UTF-8 unless `allow_utf8=false`. chardetng's
 documentation asks browsers to pass that for HTML not loaded from a file,
 unless the user asked for detection, so that pages do not come to depend on
@@ -323,6 +349,33 @@ also be wrong; the prescan reports what the document says, not whether its
 bytes agree.
 
 ## Sniffing documents
+
+`sniff_text` finds the encoding of plain text in one call: a byte order
+mark if there is one, then the label from the transport layer, such as the
+`charset` of an HTTP `Content-Type` header, then the guess of a detector
+fed with all of the bytes. It reports the step that decided:
+
+```mbt check
+///|
+test {
+  // "Keď som ju uvidel, zamrelo mi srdce.", Tatoeba sentence 9935594
+  // (CC BY 2.0 FR), in windows-1250.
+  let data = b"Ke\xEF som ju uvidel, zamrelo mi srdce."
+  assert_eq(@mbchardet.sniff_text(data[:], tld="sk"), {
+    encoding: Windows1250,
+    source: Detection,
+  })
+  assert_eq(@mbchardet.sniff_text(data[:], charset="latin2"), {
+    encoding: Iso8859_2,
+    source: TransportLayer,
+  })
+  let marked = b"\xEF\xBB\xBFname,city\n"
+  assert_eq(@mbchardet.sniff_text(marked[:], charset="latin2"), {
+    encoding: Utf8,
+    source: ByteOrderMark,
+  })
+}
+```
 
 `sniff_html` finds the encoding of an HTML document as a browser does,
 trying each step of the HTML Standard in turn, and reports the step that

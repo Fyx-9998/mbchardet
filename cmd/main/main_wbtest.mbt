@@ -128,6 +128,26 @@ test "ISO-2022-JP is not marked as ASCII" {
 }
 
 ///|
+test "the scores follow --deny-iso-2022-jp" {
+  // こんにちは in ISO-2022-JP
+  let data = b"\x1B$B$3$s$K$A$O\x1B(B"
+  let allowed = report("j.txt", data, { ..defaults(), scores: true, })
+  assert_true(allowed.contains("  ISO-2022-JP   0"))
+  let denied = report("j.txt", data, {
+    ..defaults(),
+    allow_iso_2022_jp: false,
+    scores: true,
+  })
+  assert_eq(denied[0], "j.txt: UTF-8 (ASCII only)")
+  assert_false(denied.contains("  ISO-2022-JP   0"))
+  guard denied[denied.length() - 1].strip_prefix("  ruled out: ")
+    is Some(ruled_out) else {
+    fail("no list of encodings ruled out")
+  }
+  assert_true(ruled_out.split(", ").any(name => name == "ISO-2022-JP"))
+}
+
+///|
 test "scores are listed highest first" {
   let lines = report("sk.txt", slovak, { ..defaults(), scores: true, })
   assert_eq(lines[0], "sk.txt: ISO-8859-4")
