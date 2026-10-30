@@ -33,6 +33,15 @@
 //! The decoding data hashes what a decoder with BOM removal and without
 //! replacement gives for each input: the text, or where the first malformed
 //! sequence is. The inputs are described in `decodes`.
+//!
+//! With `--chardetng-tests`, the tool instead writes
+//! chardetng_tests_data_test.mbt from the unit tests of chardetng, as
+//! described in chardetng_tests.rs:
+//!
+//!     cargo run --release --manifest-path tools/golden/Cargo.toml -- \
+//!         --chardetng-tests CHARDETNG_SOURCE/src/lib.rs chardetng_tests_data_test.mbt
+
+mod chardetng_tests;
 
 use chardetng::{EncodingDetector, Iso2022JpDetection, Utf8Detection};
 use encoding_rs::*;
@@ -974,9 +983,14 @@ fn decodes(texts: &[&str]) -> String {
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.len() == 4 && args[1] == "--chardetng-tests" {
+        fs::write(&args[3], chardetng_tests::data(&args[2]))
+            .expect("cannot write the data of chardetng's tests");
+        return;
+    }
     if args.len() != 7 {
         eprintln!(
-            "usage: mbchardet-golden CORPUS_TSV SCORES_MBT TRACES_MBT ENCODINGS_JSON LABELS_MBT DECODE_MBT"
+            "usage: mbchardet-golden CORPUS_TSV SCORES_MBT TRACES_MBT ENCODINGS_JSON LABELS_MBT DECODE_MBT\n       mbchardet-golden --chardetng-tests CHARDETNG_LIB_RS TESTS_MBT"
         );
         std::process::exit(2);
     }

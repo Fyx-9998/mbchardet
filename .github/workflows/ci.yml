@@ -227,11 +227,13 @@ jobs:
             tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt \
             "$RUNNER_TEMP/whatwg/encodings.json" golden_labels_test.mbt decode_data_test.mbt
 
-      - name: Regenerate the tables from chardetng's data.rs
+      - name: Regenerate the tables from chardetng's data.rs and the data of its tests
         run: |
           manifest=$(cargo metadata --locked --format-version 1 --manifest-path tools/golden/Cargo.toml \
             | python3 -c 'import json, sys; print(next(p["manifest_path"] for p in json.load(sys.stdin)["packages"] if p["name"] == "chardetng"))')
           python3 tools/gen_data.py "$(dirname "$manifest")/src" detector_data.mbt
+          cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- \
+            --chardetng-tests "$(dirname "$manifest")/src/lib.rs" chardetng_tests_data_test.mbt
 
       - name: Regenerate the decoding tables and the labels from the WHATWG files
         run: |
@@ -280,6 +282,7 @@ jobs:
             golden_trace_wbtest.mbt
             golden_labels_test.mbt
             decode_data_test.mbt
+            chardetng_tests_data_test.mbt
             detector_data.mbt
             cjk_index_data.mbt
             single_byte_index_data.mbt

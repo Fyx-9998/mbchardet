@@ -61,6 +61,12 @@ What is taken from chardetng 1.0.0:
     https://creativecommons.org/publicdomain/zero/1.0/"
   - The expected scores and guesses in golden_data_test.mbt, produced by
     running chardetng 1.0.0 (tools/golden).
+  - The unit tests of chardetng's src/lib.rs. chardetng_tests_data_test.mbt
+    holds the name, the expected encoding and the text of each test that is
+    one call of `check`, with the text encoded as `check` encodes it,
+    written by tools/golden with encoding_rs 0.8.42 and detone 1.0.0;
+    chardetng_tests_test.mbt ports the other tests, their names, bytes and
+    expected encodings.
 
 encoding_rs 0.8.42
   https://github.com/hsivonen/encoding_rs
@@ -83,6 +89,17 @@ encoding_rs 0.8.42
   and removes a byte order mark as its new_decoder_with_bom_removal does.
   No code is copied. decode_data_test.mbt holds hashes of what the
   encoding_rs decoders give, produced by tools/golden.
+
+detone 1.0.0
+  https://github.com/hsivonen/detone
+  https://crates.io/crates/detone/1.0.0
+  (crate SHA-256 f7104c193859c8141dcbb2008bd3d93e581d0fa7bb47b0d9f5e15c89d1b55514)
+  detone is copyright Mozilla Foundation, licensed under the Apache License,
+  Version 2.0 or the MIT license, at your option.
+
+  tools/golden uses it, as chardetng's tests do, to split the tones off the
+  Vietnamese text of chardetng's test_vi before encoding it in
+  windows-1258. No code is copied.
 
 WHATWG Encoding Standard
   https://encoding.spec.whatwg.org/

@@ -53,7 +53,8 @@ Implemented:
   content. The scores and guesses are chardetng's: a golden test compares
   them with chardetng 1.0.0 on 396 inputs, each fed whole and in chunks of
   1, 2, 3 and 7 bytes, with guesses for 33 top-level domain labels and for
-  none, each with UTF-8 allowed and denied. The CJK candidates use their own
+  none, each with UTF-8 allowed and denied, and the detector passes the 90
+  unit tests of chardetng 1.0.0 itself. The CJK candidates use their own
   decoders, built from the Encoding
   Standard's index tables; a second test compares them with the decoders of
   encoding_rs 0.8.42, which chardetng uses, on every one- and two-byte input,
@@ -650,10 +651,10 @@ Pages at <https://fyx-9998.github.io/mbchardet/>.
 ## Testing
 
 `moon test` runs unit tests, tests of the command-line tool and of the
-functions of the demo, and golden
-tests against data that chardetng, encoding_rs, html-encoding-sniffer and
-expat themselves produced. The data and the tables are generated, and CI
-checks that regenerating them gives the committed files:
+functions of the demo, the unit tests of chardetng ported to MoonBit, and
+golden tests against data that chardetng, encoding_rs, html-encoding-sniffer
+and expat themselves produced. The data and the tables are generated, and
+CI checks that regenerating them gives the committed files:
 
 - `tools/gen_corpus.py` picks sentences from Tatoeba into `tools/corpus.tsv`.
 - `tools/golden` (Rust, with chardetng 1.0.0 and encoding_rs 0.8.42 pinned
@@ -667,7 +668,18 @@ checks that regenerating them gives the committed files:
   in each of the 40 encodings: groups of every input of one or two bytes
   after a prefix, and 88 short seeds, most of them prefixes of corpus
   sentences, with their variations, made as for `tools/sniffer` with 24
-  bytes to replace or insert.
+  bytes to replace or insert. With `--chardetng-tests`, it reads the unit
+  tests in chardetng's `src/lib.rs` and writes `chardetng_tests_data_test.mbt`:
+  for the 59 tests that are one call of `check`, the expected encoding and
+  the text encoded as `check` encodes it, with encoding_rs and, for
+  Vietnamese, detone 1.0.0. It checks that chardetng passes each of them.
+  `chardetng_tests_test.mbt` runs them and ports the other 31 tests, which
+  build their bytes or feed them in chunks, by hand; a test checks that the
+  two together name every test of chardetng. chardetng's `test_fa` keeps a
+  character that windows-1256 lacks, which the encoder writes as `&#1740;`,
+  and the port keeps those bytes too. One more test in `src/lib.rs`,
+  `test_lt_windows_iso_8859_4`, is commented out there with the note that
+  it is detected as ISO-8859-2, and is not ported.
 - `tools/gen_data.py` writes chardetng's tables from its `src/data.rs` and
   `src/tld.rs` to `detector_data.mbt`.
 - `tools/gen_index.py` writes the GB18030, Big5, JIS X 0208, JIS X 0212 and
@@ -704,6 +716,7 @@ checks that regenerating them gives the committed files:
 python tools/gen_corpus.py CACHE_DIR tools/corpus.tsv
 cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- tools/corpus.tsv golden_data_test.mbt golden_trace_wbtest.mbt WHATWG_DIR/encodings.json golden_labels_test.mbt decode_data_test.mbt
 python tools/gen_data.py CHARDETNG_SOURCE/src detector_data.mbt
+cargo run --release --locked --manifest-path tools/golden/Cargo.toml -- --chardetng-tests CHARDETNG_SOURCE/src/lib.rs chardetng_tests_data_test.mbt
 python tools/gen_index.py WHATWG_DIR cjk_index_data.mbt single_byte_index_data.mbt
 python tools/gen_labels.py WHATWG_DIR/encodings.json label_data.mbt
 npm ci --prefix tools/sniffer
