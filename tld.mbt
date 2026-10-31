@@ -432,7 +432,7 @@ fn score_adjustment(score : Int64, encoding : Int32, tld : Tld) -> Int64 {
       | CANDIDATE_EUC_JP
       | CANDIDATE_TURKISH
       | CANDIDATE_VIETNAMESE)
-    Generic => panic()
+    Generic => abort("score_adjustment: not for a generic domain")
   }
   if unadjusted {
     score

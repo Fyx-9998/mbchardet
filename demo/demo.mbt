@@ -7,7 +7,7 @@
 /// first malformed sequence and its length (null if the input ends inside
 /// it).
 fn decoded_json(data : Bytes, encoding : @mbchardet.Encoding) -> Json {
-  match encoding.decode(data[:]) {
+  match encoding.decode(data) {
     Ok(text) => { "text": Json::string(text), "error": Json::null() }
     Err(error) =>
       {
@@ -90,22 +90,22 @@ pub fn examine(
     None
   } else {
     let detector = @mbchardet.Detector::new(allow_iso_2022_jp~)
-    detector.feed(data[:], last=true) |> ignore
+    detector.feed(data, last=true) |> ignore
     Some(detector)
   }
   let sniffed : @mbchardet.Sniffed = match mode {
     "html" =>
       @mbchardet.sniff_html(
-        data[:],
+        data,
         charset~,
         tld?,
         allow_utf8~,
         allow_iso_2022_jp~,
       )
-    "xml" => @mbchardet.sniff_xml(data[:], charset~)
+    "xml" => @mbchardet.sniff_xml(data, charset~)
     _ =>
       @mbchardet.sniff_text(
-        data[:],
+        data,
         charset~,
         tld?,
         allow_utf8~,

@@ -33,7 +33,7 @@ fn Inner::feed_single_byte(self : Inner, buffer : BytesView) -> Int64? {
     | ShiftJis(_)
     | EucJp(_)
     | Iso2022Jp(_)
-    | EucKr(_) => panic()
+    | EucKr(_) => abort("Inner::feed_single_byte: not a single-byte candidate")
   }
 }
 
@@ -92,7 +92,7 @@ fn Inner::feed_slice(self : Inner, buffer : BytesView, last : Bool) -> Int64? {
     return Some(score)
   }
   // Treat EOF as space-like
-  match self.feed_single_byte(b" "[:]) {
+  match self.feed_single_byte(b" ") {
     Some(additional) => Some(score + additional)
     None => None
   }
@@ -134,7 +134,7 @@ fn Candidate::single_byte(index : Int32) -> Candidate {
     WINDOWS_1256_INDEX => ArabicFrench(ArabicFrenchCandidate::new(data))
     WINDOWS_1255_INDEX => Logical(LogicalCandidate::new(data))
     ISO_8859_8_INDEX => Visual(VisualCandidate::new(data))
-    _ => panic()
+    _ => abort("Candidate::single_byte: no candidate for index \{index}")
   }
   Candidate::new(inner, data.encoding)
 }
@@ -197,7 +197,7 @@ fn Candidate::plausible_punctuation(self : Candidate) -> Int64 {
   match self.inner {
     Logical(c) => c.plausible_punctuation
     Visual(c) => c.plausible_punctuation
-    _ => panic()
+    _ => abort("Candidate::plausible_punctuation: not a Hebrew candidate")
   }
 }
 
@@ -212,7 +212,9 @@ fn Candidate::plausible_punctuation(self : Candidate) -> Int64 {
 /// give, and the guess that chooses between them.
 struct Detector {
   candidates : Array[Candidate]
-  mut non_ascii_seen : Int64
+  // Whether a non-ASCII byte has been fed. chardetng counts them, but only
+  // compares the count with zero.
+  mut non_ascii_seen : Bool
   // Up to two bytes of context before the first non-ASCII byte, which
   // chardetng needs for Spanish "n.º".
   mut before_non_ascii : Bytes
@@ -274,7 +276,7 @@ pub fn Detector::new(allow_iso_2022_jp~ : Bool = true) -> Detector {
   }
   {
     candidates,
-    non_ascii_seen: 0,
+    non_ascii_seen: false,
     before_non_ascii: b"",
     esc_seen: false,
     closed: false,
@@ -290,10 +292,8 @@ fn Detector::feed_candidates(
   for candidate in self.candidates {
     candidate.feed(buffer, last)
   }
-  for byte in buffer {
-    if byte >= b'\x80' {
-      self.non_ascii_seen += 1
-    }
+  if !self.non_ascii_seen {
+    self.non_ascii_seen = buffer.iter().any(byte => byte >= b'\x80')
   }
 }
 
@@ -340,7 +340,7 @@ pub fn Detector::feed(
     self.closed = true
   }
   let mut start = 0
-  if self.non_ascii_seen == 0 && !self.esc_seen {
+  if !self.non_ascii_seen && !self.esc_seen {
     let mut up_to = chunk.length()
     for i, byte in chunk {
       if byte >= b'\x80' {
@@ -358,19 +358,19 @@ pub fn Detector::feed(
     }
     if start == chunk.length() {
       self.remember_before_non_ascii(chunk)
-      return self.non_ascii_seen != 0
+      return self.non_ascii_seen
     }
     if start == 0 || start == 1 {
       let before = self.before_non_ascii
       self.before_non_ascii = b""
-      self.feed_candidates(before[:], false)
+      self.feed_candidates(before, false)
       start = 0
     } else {
       start = start - 2
     }
   }
   self.feed_candidates(chunk[start:], last)
-  self.non_ascii_seen != 0
+  self.non_ascii_seen
 }
 
 ///|
@@ -476,7 +476,7 @@ pub fn Detector::guess(
     None => Generic
   }
   let candidates = self.candidates
-  if self.non_ascii_seen == 0 &&
+  if !self.non_ascii_seen &&
     self.esc_seen &&
     candidates[CANDIDATE_ISO_2022_JP].score is Some(_) {
     return Iso2022Jp

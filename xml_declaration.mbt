@@ -52,7 +52,7 @@ priv struct Cursor {
 /// Moves past `word` if the bytes continue with it.
 fn Cursor::word(self : Cursor, word : Bytes) -> Bool {
   let rest = self.bytes[self.pos:]
-  guard rest.length() >= word.length() && rest[:word.length()] == word[:] else {
+  guard rest.length() >= word.length() && rest[:word.length()] == word else {
     return false
   }
   self.pos += word.length()

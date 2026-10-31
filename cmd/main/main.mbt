@@ -187,7 +187,7 @@ fn examine(
   let sniffed = match settings.kind {
     Text =>
       @mbchardet.sniff_text(
-        data[:],
+        data,
         charset?,
         tld?=settings.tld,
         allow_utf8=settings.allow_utf8,
@@ -195,13 +195,13 @@ fn examine(
       )
     Html =>
       @mbchardet.sniff_html(
-        data[:],
+        data,
         charset?,
         tld?=settings.tld,
         allow_utf8=settings.allow_utf8,
         allow_iso_2022_jp=settings.allow_iso_2022_jp,
       )
-    Xml => @mbchardet.sniff_xml(data[:], charset?)
+    Xml => @mbchardet.sniff_xml(data, charset?)
   }
   let { encoding, source, } = sniffed
   let note = match source {
@@ -226,7 +226,7 @@ fn examine(
     let detector = @mbchardet.Detector::new(
       allow_iso_2022_jp=settings.allow_iso_2022_jp,
     )
-    detector.feed(data[:], last=true) |> ignore
+    detector.feed(data, last=true) |> ignore
     lines.append(score_lines(detector))
   }
   (lines, encoding)
@@ -239,7 +239,7 @@ fn convert(
   data : Bytes,
   encoding : @mbchardet.Encoding,
 ) -> Result[Bytes, String] {
-  match encoding.decode(data[:]) {
+  match encoding.decode(data) {
     Ok(text) => Ok(@utf8.encode(text))
     Err(error) if encoding == Replacement => Err(error.to_string())
     Err(error) => {
