@@ -13,7 +13,7 @@ env:
   # deliberately: newer releases may format code differently. Versioned
   # downloads on cli.moonbitlang.com are deleted about 60 days after release,
   # so this pin has to move forward before then.
-  MOONBIT_INSTALL_VERSION: "0.10.17+093cb8f9c"
+  MOONBIT_INSTALL_VERSION: "0.10.18+6c83a7f62"
 
 jobs:
   test:
