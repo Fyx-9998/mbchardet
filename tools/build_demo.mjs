@@ -9,7 +9,12 @@ import { join } from "node:path";
 const out = process.argv[2] ?? "_site";
 execFileSync("moon", ["build", "--target", "js", "--release"], { stdio: "inherit" });
 mkdirSync(out, { recursive: true });
-copyFileSync(join("_build", "js", "release", "build", "demo", "demo.js"), join(out, "mbchardet.js"));
+// moon.work makes the root a workspace, which builds each module's packages
+// under the module's name.
+copyFileSync(
+  join("_build", "js", "release", "build", "Fyx-9998", "mbchardet", "demo", "demo.js"),
+  join(out, "mbchardet.js"),
+);
 for (const file of ["index.html", "app.js", "style.css"]) {
   copyFileSync(join("demo", file), join(out, file));
 }

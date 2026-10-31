@@ -110,14 +110,14 @@ Implemented:
   one byte at a time and in chunks of other sizes, and another decodes
   every Unicode character in UTF-8, UTF-16LE and UTF-16BE in chunks that
   split characters at every position. See [Decoding](#decoding).
-- `mbchardet`, a command-line tool (`cmd/main`): for each file, the
-  encoding its byte order mark names if it has one, otherwise the
-  detector's guess, and which of them decided. `--charset` passes a label
-  from the transport layer, and `--html` and `--xml` find the encoding as
-  `sniff_html` and `sniff_xml` do. Other options set the top-level domain,
-  deny UTF-8 or ISO-2022-JP, and list the scores. `--output` writes a file
-  in UTF-8, unless a byte sequence in it is not valid in the encoding found.
-  See [Command line](#command-line).
+- `mbchardet`, a command-line tool (`cmd/main`, in a module of its own):
+  for each file, the encoding its byte order mark names if it has one,
+  otherwise the detector's guess, and which of them decided. `--charset`
+  passes a label from the transport layer, and `--html` and `--xml` find
+  the encoding as `sniff_html` and `sniff_xml` do. Other options set the
+  top-level domain, deny UTF-8 or ISO-2022-JP, and list the scores.
+  `--output` writes a file in UTF-8, unless a byte sequence in it is not
+  valid in the encoding found. See [Command line](#command-line).
 - A browser demo (`demo/`): open a file, or one of the samples, and see its
   encoding, the step that decided, the detector's scores and the text, and
   download the text in UTF-8. The `demo` package compiles to JavaScript,
@@ -149,8 +149,12 @@ Not included:
 
 ## Usage
 
-The module is not published on mooncakes yet; depend on a checkout of this
-repository. The package is imported as `@mbchardet`.
+The module is not published on mooncakes yet. To use a checkout of this
+repository, make a workspace of it and your module:
+`moon work init <your module> <the checkout>` writes a `moon.work` that
+lists both directories. Your `moon.mod` then imports
+`"Fyx-9998/mbchardet@0.1.0"`, as `cmd/moon.mod` does here, and a package
+whose `moon.pkg` imports `"Fyx-9998/mbchardet"` uses it as `@mbchardet`.
 
 ```mbt check
 ///|
@@ -597,10 +601,11 @@ replacement.
 ## Command line
 
 `cmd/main` is the `mbchardet` command. `moon run cmd/main --` followed by
-its arguments runs it, on any backend (`--target native` builds a native
-executable). Here `sk.txt` holds the Slovak sentence above in windows-1250,
-`zh.txt` Chinese text in GBK, `bom.csv` a CSV file that starts with a
-UTF-8 byte order mark, `ascii.txt` plain ASCII, `page.html` a page with
+its arguments runs it from the root of the repository, on any backend
+(`--target native` builds a native executable). Here `sk.txt` holds the
+Slovak sentence above in windows-1250, `zh.txt` Chinese text in GBK,
+`bom.csv` a CSV file that starts with a UTF-8 byte order mark,
+`ascii.txt` plain ASCII, `page.html` a page with
 `<meta charset="Shift_JIS">`, `feed.xml` a feed that starts with
 `<?xml version="1.0" encoding="windows-1251"?>`, and `bad.txt` the text
 `ok`, a space, the byte 81 and ` bad`, which is not valid GBK:
@@ -809,13 +814,16 @@ on the machine and the runtime;
 
 ## Platforms
 
-The library is pure MoonBit with no dependencies. The command-line tool also
-uses `moonbitlang/core/argparse` and, to read and write files, the `fs` and
+The library is pure MoonBit with no dependencies. The command-line tool is
+a module of its own, `Fyx-9998/mbchardet-cli` in `cmd/`, which also uses
+`moonbitlang/core/argparse` and, to read and write files, the `fs` and
 `sys` packages of [moonbitlang/x](https://github.com/moonbitlang/x) 0.5.6
-(Apache 2.0); depending on the module downloads moonbitlang/x, which only the
-tool builds. CI checks and tests everything on the wasm, wasm-gc, js and native
-backends, on Linux, macOS and Windows, and runs the tool on sample files with
-each backend.
+(Apache 2.0); a module that depends on the library does not download
+moonbitlang/x. `moon.work` makes the two modules one workspace, so
+`moon check`, `moon test` and `moon run cmd/main` at the root of the
+repository cover both. CI checks and tests everything on the wasm,
+wasm-gc, js and native backends, on Linux, macOS and Windows, and runs the
+tool on sample files with each backend.
 
 ## License
 
