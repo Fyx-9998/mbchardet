@@ -7,8 +7,8 @@ they can be decoded correctly instead of turning into mojibake.
 ## Status
 
 Everything listed under Implemented works and is tested on the wasm,
-wasm-gc, js and native backends. The module is not published on mooncakes
-yet, and its API may still change before it is. The detector, ported from
+wasm-gc, js and native backends. Version 0.1.0 is published on mooncakes;
+its API may still change in later 0.x versions. The detector, ported from
 chardetng 1.0.0, scores the encodings chardetng detects and guesses between
 them as chardetng does. The prescan of the HTML Standard finds the encoding
 a document declares, `sniff_html` and `sniff_xml` find the encoding of a
@@ -145,16 +145,18 @@ Not included:
   scores that compare encodings for the same input, not a probability.
 - Reading a file in pieces in the command-line tool, which reads each file
   whole; `Detector` and `Decoder` take input in chunks.
-- A release on mooncakes.
 
 ## Usage
 
-The module is not published on mooncakes yet. To use a checkout of this
-repository, make a workspace of it and your module:
+`moon add Fyx-9998/mbchardet` adds the module to yours: your `moon.mod`
+then imports `"Fyx-9998/mbchardet@0.1.0"`, and a package whose `moon.pkg`
+imports `"Fyx-9998/mbchardet"` uses it as `@mbchardet`. What mooncakes
+holds is the library; the command-line tool and the browser demo are in
+the [repository](https://github.com/Fyx-9998/mbchardet). To use a checkout
+of the repository instead, make a workspace of it and your module:
 `moon work init <your module> <the checkout>` writes a `moon.work` that
-lists both directories. Your `moon.mod` then imports
-`"Fyx-9998/mbchardet@0.1.0"`, as `cmd/moon.mod` does here, and a package
-whose `moon.pkg` imports `"Fyx-9998/mbchardet"` uses it as `@mbchardet`.
+lists both directories, and your `moon.mod` imports the module as above,
+as `cmd/moon.mod` does here.
 
 ```mbt check
 ///|

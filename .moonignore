@@ -1,0 +1,18 @@
+# The files `moon package` and `moon publish` leave out. In this directory
+# it takes the place of .gitignore, so it repeats it.
+_build/
+target/
+node_modules/
+.mooncakes/
+.moonagent/
+.DS_Store
+_site/
+
+# Not part of the library module: the command-line tool is a module of its
+# own, the demo page and the tools that produce the test data are only in
+# the repository, and README.md only links to README.mbt.md.
+/cmd/
+/demo/
+/tools/
+/moon.work
+/README.md
