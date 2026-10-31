@@ -6,15 +6,17 @@ they can be decoded correctly instead of turning into mojibake.
 
 ## Status
 
-Early development. The detector, ported from chardetng 1.0.0, scores the
-encodings chardetng detects and guesses between them as chardetng does. The
-prescan of the HTML Standard finds the encoding a document declares,
-`sniff_html` and `sniff_xml` find the encoding of a whole document in the
-order the HTML Standard and XML 1.0 give, and `sniff_text` that of plain
-text in one call. `Encoding::decode` turns bytes into text and refuses,
-instead of replacing, a byte sequence that is not valid in the encoding,
-and a `Decoder` does the same for input that arrives in chunks; the
-command-line tool can write the text in UTF-8, and a
+Everything listed under Implemented works and is tested on the wasm,
+wasm-gc, js and native backends. The module is not published on mooncakes
+yet, and its API may still change before it is. The detector, ported from
+chardetng 1.0.0, scores the encodings chardetng detects and guesses between
+them as chardetng does. The prescan of the HTML Standard finds the encoding
+a document declares, `sniff_html` and `sniff_xml` find the encoding of a
+whole document in the order the HTML Standard and XML 1.0 give, and
+`sniff_text` that of plain text in one call. `Encoding::decode` turns bytes
+into text and refuses, instead of replacing, a byte sequence that is not
+valid in the encoding, and a `Decoder` does the same for input that arrives
+in chunks; the command-line tool can write the text in UTF-8, and a
 [browser demo](https://fyx-9998.github.io/mbchardet/) shows the encoding,
 the scores and the text of a file.
 
@@ -132,6 +134,18 @@ Implemented:
   them in case and whitespace, and strings that are no label. The detector
   and `sniff_bom` only report the first 28 encodings, up to `Ibm866`; the
   others only come from labels.
+
+Not included:
+
+- Encoding text into a legacy encoding, and decoding with replacement
+  (U+FFFD); [moon_encoding](https://github.com/LL728/moon_encoding)
+  implements both.
+- UTF-32 and EBCDIC, which the Encoding Standard does not define.
+- A confidence value. As in chardetng, the detector gives a guess and
+  scores that compare encodings for the same input, not a probability.
+- Reading a file in pieces in the command-line tool, which reads each file
+  whole; `Detector` and `Decoder` take input in chunks.
+- A release on mooncakes.
 
 ## Usage
 
