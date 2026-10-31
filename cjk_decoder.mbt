@@ -11,8 +11,7 @@
 
 ///|
 /// What one byte fed to a decoder produced. The candidates read only the
-/// first unit of `Units`; `Encoding::decode` and the decoder tests read
-/// both.
+/// first unit of `Units`; `Decoder` and the decoder tests read both.
 priv enum Step {
   /// The byte was consumed; a character is not complete yet.
   Pending

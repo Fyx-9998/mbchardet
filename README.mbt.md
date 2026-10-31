@@ -12,8 +12,9 @@ prescan of the HTML Standard finds the encoding a document declares,
 `sniff_html` and `sniff_xml` find the encoding of a whole document in the
 order the HTML Standard and XML 1.0 give, and `sniff_text` that of plain
 text in one call. `Encoding::decode` turns bytes into text and refuses,
-instead of replacing, a byte sequence that is not valid in the encoding;
-the command-line tool can write the text in UTF-8, and a
+instead of replacing, a byte sequence that is not valid in the encoding,
+and a `Decoder` does the same for input that arrives in chunks; the
+command-line tool can write the text in UTF-8, and a
 [browser demo](https://fyx-9998.github.io/mbchardet/) shows the encoding,
 the scores and the text of a file.
 
@@ -102,7 +103,11 @@ Implemented:
   UTF-16 lead surrogate, the start of a four-byte GB18030 sequence or an
   ISO-2022-JP escape sequence; and on 96,850 variations of 88 short texts.
   The single-byte encodings use tables built from the Encoding Standard's
-  index files. See [Decoding](#decoding).
+  index files. A `Decoder` does the same for input that arrives in chunks,
+  with a character split between chunks; the same test compares it, fed
+  one byte at a time and in chunks of other sizes, and another decodes
+  every Unicode character in UTF-8, UTF-16LE and UTF-16BE in chunks that
+  split characters at every position. See [Decoding](#decoding).
 - `mbchardet`, a command-line tool (`cmd/main`): for each file, the
   encoding its byte order mark names if it has one, otherwise the
   detector's guess, and which of them decided. `--charset` passes a label
@@ -517,6 +522,34 @@ test {
   assert_eq(sniffed.encoding.decode(page[:]), Ok("<p>café</p>"))
 }
 ```
+
+Input that arrives in chunks, such as a file read piece by piece or a
+network stream, goes to a `Decoder`. `decode` returns the text of the
+characters each chunk completes and keeps the bytes of a character split
+between chunks; `finish` ends the input, and only then is a character left
+unfinished an error. However the input is split, the text and the first
+error are those of `Encoding::decode` for the whole input, with offsets
+counted from its start:
+
+```mbt check
+///|
+test {
+  let decoder = @mbchardet.Decoder::new(@mbchardet.Gbk)
+  // 张 is D5 C5; the chunk ends after its first byte.
+  assert_eq(decoder.decode(b"name,city\n\xD5"[:]), Ok("name,city\n"))
+  assert_eq(decoder.decode(b"\xC5\xCE\xB0,"[:]), Ok("张伟,"))
+  // 北 complete, then the first byte of 京, and the input ends.
+  assert_eq(decoder.decode(b"\xB1\xB1\xBE"[:]), Ok("北"))
+  match decoder.finish() {
+    Err(error) => assert_eq(error.valid_up_to, 17)
+    Ok(_) => fail("expected an error")
+  }
+}
+```
+
+The call that finds a malformed sequence returns only the error: the text
+of its chunk before the sequence is not returned, and `valid_up_to` tells
+where it ends. After an error, every call returns that error again.
 
 Valid does not mean right. In a single-byte encoding nearly every byte is
 valid, so text decoded with a wrong guess comes out with wrong letters and

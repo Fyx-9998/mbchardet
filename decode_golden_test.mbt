@@ -1,6 +1,7 @@
-// Compares Encoding::decode with the decoders of encoding_rs 0.8.42 on the
-// inputs of decode_data_test.mbt, which tools/golden writes: a few prefixes
-// followed by every sequence of one or two bytes, and mutations of seeds as
+// Compares Encoding::decode, and a Decoder fed the same input in chunks,
+// with the decoders of encoding_rs 0.8.42 on the inputs of
+// decode_data_test.mbt, which tools/golden writes: a few prefixes followed
+// by every sequence of one or two bytes, and mutations of seeds as
 // mutation_test.mbt describes them. Both sides hash what they give the same
 // way, so a failure names a group or a seed but not the input in it.
 
@@ -25,14 +26,42 @@ fn Fnv::word(self : Fnv, word : Int32) -> Unit {
 }
 
 ///|
-/// Hashes what decoding `input` gives like tools/golden: [0, length, UTF-16
-/// code units...] for text, [1, offset, length or -1] for an error.
-fn hash_decode(
-  hash : Fnv,
+/// What a `Decoder` gives for `input` fed in chunks of `size` bytes: the
+/// text of all the chunks, or the first error.
+fn decode_in_chunks(
   encoding : @mbchardet.Encoding,
   input : BytesView,
+  size : Int32,
+) -> Result[String, @mbchardet.DecodeError] {
+  let decoder = @mbchardet.Decoder::new(encoding)
+  let text = StringBuilder()
+  let mut start = 0
+  while start < input.length() {
+    let end = if input.length() - start > size {
+      start + size
+    } else {
+      input.length()
+    }
+    match decoder.decode(input[start:end]) {
+      Ok(chunk) => text.write_string(chunk)
+      Err(error) => return Err(error)
+    }
+    start = end
+  }
+  match decoder.finish() {
+    Ok(_) => Ok(text.to_string())
+    Err(error) => Err(error)
+  }
+}
+
+///|
+/// Hashes what decoding gives like tools/golden: [0, length, UTF-16 code
+/// units...] for text, [1, offset, length or -1] for an error.
+fn hash_decode(
+  hash : Fnv,
+  decoded : Result[String, @mbchardet.DecodeError],
 ) -> Unit {
-  match encoding.decode(input) {
+  match decoded {
     Ok(text) => {
       hash.word(0)
       hash.word(text.length())
@@ -67,15 +96,24 @@ test "every input of one or two bytes after a prefix decodes as in encoding_rs" 
       input[i] = b
     }
     let hash = Fnv::new()
+    // A Decoder fed one byte at a time.
+    let streamed = Fnv::new()
     for suffix in 0..<(1 << (8 * n)) {
       for i in 0..<n {
         input[prefix.length() + i] = (suffix >> (8 * (n - 1 - i))).to_byte()
       }
-      hash_decode(hash, encoding, Bytes::from_array(input))
+      let bytes = Bytes::from_array(input)
+      hash_decode(hash, encoding.decode(bytes))
+      hash_decode(streamed, decode_in_chunks(encoding, bytes, 1))
     }
     if hash.value != expected {
       fail(
         "\{name}: \{bytes_literal(prefix)} followed by each sequence of \{n} bytes does not decode as in encoding_rs",
+      )
+    }
+    if streamed.value != expected {
+      fail(
+        "\{name}: \{bytes_literal(prefix)} followed by each sequence of \{n} bytes does not decode as in encoding_rs when fed one byte at a time",
       )
     }
   }
@@ -91,12 +129,22 @@ test "seeds and their mutations decode as in encoding_rs" {
     assert_eq(encoding.decode(seed), Ok(text))
     let mutations = mutations(seed, decode_alphabet)
     let hash = Fnv::new()
-    for mutation in mutations {
-      hash_decode(hash, encoding, mutation)
+    // A Decoder fed each mutation in chunks of 1, 2, 3 or 7 bytes, or whole,
+    // in turn.
+    let streamed = Fnv::new()
+    for i, mutation in mutations {
+      hash_decode(hash, encoding.decode(mutation))
+      let size = [1, 2, 3, 7, mutation.length() + 1][i % 5]
+      hash_decode(streamed, decode_in_chunks(encoding, mutation, size))
     }
     if hash.value != expected {
       fail(
         "\{name}: the mutations of \{bytes_literal(seed)} do not decode as in encoding_rs",
+      )
+    }
+    if streamed.value != expected {
+      fail(
+        "\{name}: the mutations of \{bytes_literal(seed)} do not decode as in encoding_rs when fed in chunks",
       )
     }
     total += mutations.length()

@@ -31,6 +31,11 @@ pub(all) struct DecodeError {
 pub fn DecodeError::to_string(Self) -> String
 pub impl Show for DecodeError
 
+type Decoder
+pub fn Decoder::decode(Self, BytesView) -> Result[String, DecodeError]
+pub fn Decoder::finish(Self) -> Result[Unit, DecodeError]
+pub fn Decoder::new(Encoding) -> Self
+
 type Detector
 pub fn Detector::encodings() -> Array[Encoding]
 pub fn Detector::feed(Self, BytesView, last? : Bool) -> Bool
