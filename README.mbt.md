@@ -511,7 +511,7 @@ test {
   // The same file cut inside its last character.
   match gbk.decode(csv[:csv.length() - 2]) {
     Err(error) => {
-      assert_eq(error.valid_up_to, 17)
+      assert_eq(error.valid_up_to, 17L)
       assert_eq(error.error_len, None)
       assert_eq(
         error.to_string(),
@@ -555,7 +555,7 @@ test {
   // 北 complete, then the first byte of 京, and the input ends.
   assert_eq(decoder.decode(b"\xB1\xB1\xBE"[:]), Ok("北"))
   match decoder.finish() {
-    Err(error) => assert_eq(error.valid_up_to, 17)
+    Err(error) => assert_eq(error.valid_up_to, 17L)
     Ok(_) => fail("expected an error")
   }
 }

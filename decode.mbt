@@ -7,8 +7,9 @@ pub(all) struct DecodeError {
   /// The encoding the input was decoded from.
   encoding : Encoding
   /// Number of bytes before the first malformed sequence, counting a byte
-  /// order mark. Those bytes decode without loss.
-  valid_up_to : Int32
+  /// order mark. Those bytes decode without loss. An Int64, like the offset
+  /// of `Utf8Error`, since a `Decoder` takes input of any length.
+  valid_up_to : Int64
   /// Length in bytes of the malformed sequence that starts at `valid_up_to`,
   /// or `None` when the input ends inside a sequence that more bytes could
   /// have completed.
@@ -74,7 +75,7 @@ pub fn Encoding::decode(
       Invalid(error) =>
         Err({
           encoding: self,
-          valid_up_to: error.valid_up_to.to_int(),
+          valid_up_to: error.valid_up_to,
           error_len: error.error_len,
         })
       // With no malformed sequence, decode_lossy replaces nothing.
@@ -206,8 +207,10 @@ struct Decoder {
   encoding : Encoding
   bytewise : Bytewise
   // Bytes in the chunks decoded before.
-  mut consumed : Int32
-  // The offset of the first byte of the sequence being read.
+  mut consumed : Int64
+  // The offset of the first byte of the sequence being read, from the start
+  // of the current chunk: below 0 if the sequence began in an earlier one.
+  // Int, so that the loops over bytes stay in 32 bits.
   mut first : Int32
   // Whether no character has been written yet, while a U+FEFF would be a
   // byte order mark: for UTF-8, UTF-16BE and UTF-16LE only.
@@ -252,8 +255,7 @@ fn Decoder::write(
 /// input. The bytes of a character left unfinished at the end of the chunk
 /// are kept for the next one.
 ///
-/// Panics if called after `finish` returned `Ok`, or once the chunks reach
-/// 2147483647 bytes in all, since the offsets of `DecodeError` are `Int`.
+/// Panics if called after `finish` returned `Ok`.
 pub fn Decoder::decode(
   self : Decoder,
   chunk : BytesView,
@@ -264,9 +266,6 @@ pub fn Decoder::decode(
   if self.finished {
     abort("Decoder::decode: called after finish")
   }
-  if chunk.length() > 0x7FFFFFFF - self.consumed {
-    abort("Decoder::decode: more than 2147483647 bytes in all")
-  }
   let (feed, incomplete) = match self.bytewise {
     Table(index) => return self.decode_table(index, chunk)
     Stepper(feed, incomplete) => (feed, incomplete)
@@ -274,7 +273,7 @@ pub fn Decoder::decode(
   let text = StringBuilder(size_hint=chunk.length())
   for i in 0..<chunk.length() {
     if !incomplete() {
-      self.first = self.consumed + i
+      self.first = i
     }
     match feed(chunk[i].to_int()) {
       Pending => ()
@@ -291,14 +290,14 @@ pub fn Decoder::decode(
         // first one useless, and encoding_rs reports that one. Other
         // decoders report no malformed sequence of 3 bytes that starts
         // before the sequence being read.
-        let valid_up_to = if self.encoding == Iso2022Jp && length == 3 {
+        let first = if self.encoding == Iso2022Jp && length == 3 {
           self.first - 3
         } else {
           self.first
         }
         let error = {
           encoding: self.encoding,
-          valid_up_to,
+          valid_up_to: self.consumed + first.to_int64(),
           error_len: Some(length),
         }
         self.error = Some(error)
@@ -306,7 +305,8 @@ pub fn Decoder::decode(
       }
     }
   }
-  self.consumed += chunk.length()
+  self.consumed += chunk.length().to_int64()
+  self.first -= chunk.length()
   Ok(text.to_string())
 }
 
@@ -330,7 +330,7 @@ fn Decoder::decode_table(
     if code_point == 0 {
       let error = {
         encoding: self.encoding,
-        valid_up_to: self.consumed + i,
+        valid_up_to: self.consumed + i.to_int64(),
         error_len: Some(1),
       }
       self.error = Some(error)
@@ -338,7 +338,7 @@ fn Decoder::decode_table(
     }
     text.write_char(code_point.unsafe_to_char())
   }
-  self.consumed += chunk.length()
+  self.consumed += chunk.length().to_int64()
   Ok(text.to_string())
 }
 
@@ -353,7 +353,7 @@ pub fn Decoder::finish(self : Decoder) -> Result[Unit, DecodeError] {
   if self.bytewise is Stepper(_, incomplete) && incomplete() {
     let error = {
       encoding: self.encoding,
-      valid_up_to: self.first,
+      valid_up_to: self.consumed + self.first.to_int64(),
       error_len: None,
     }
     self.error = Some(error)

@@ -9,7 +9,7 @@ fn decoded(
 ///|
 fn refused(
   encoding : @mbchardet.Encoding,
-  valid_up_to : Int32,
+  valid_up_to : Int64,
   error_len : Int32?,
 ) -> Result[String, @mbchardet.DecodeError] {
   Err({ encoding, valid_up_to, error_len, })

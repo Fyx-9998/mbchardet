@@ -243,11 +243,13 @@ fn convert(
     Ok(text) => Ok(@utf8.encode(text))
     Err(error) if encoding == Replacement => Err(error.to_string())
     Err(error) => {
+      // Within `data`, which a Bytes holds, so the offset fits an Int.
+      let start = error.valid_up_to.to_int()
       let end = match error.error_len {
-        Some(length) => error.valid_up_to + length
+        Some(length) => start + length
         None => data.length()
       }
-      let bytes = data[error.valid_up_to:end]
+      let bytes = data[start:end]
         .iter()
         .map(b => b.to_int().to_string(radix=16).to_upper().pad_start(2, '0'))
         .join(" ")

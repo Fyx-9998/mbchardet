@@ -71,7 +71,7 @@ fn hash_decode(
     }
     Err(error) => {
       hash.word(1)
-      hash.word(error.valid_up_to)
+      hash.word(error.valid_up_to.to_int())
       hash.word(error.error_len.unwrap_or(-1))
     }
   }

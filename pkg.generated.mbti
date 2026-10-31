@@ -25,7 +25,7 @@ pub fn tld_may_affect_guess(String) -> Bool
 // Types and methods
 pub(all) struct DecodeError {
   encoding : Encoding
-  valid_up_to : Int32
+  valid_up_to : Int64
   error_len : Int32?
 } derive(Eq, @debug.Debug)
 pub fn DecodeError::to_string(Self) -> String
