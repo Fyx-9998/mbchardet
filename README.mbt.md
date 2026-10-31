@@ -771,25 +771,26 @@ built by GCC 12.5 on Ubuntu under WSL), the throughput in MB/s was:
 
 | | wasm-gc | wasm | js | native |
 |---|---:|---:|---:|---:|
-| detect UTF-8 | 41 | 32 | 18 | 56 |
-| detect ASCII | 890 | 870 | 1,030 | 1,530 |
-| detect GBK | 26 | 18 | 14 | 36 |
-| detect Shift_JIS | 26 | 16 | 14 | 38 |
-| detect windows-1251 | 13 | 11 | 6 | 24 |
-| detect windows-1252 | 15 | 11 | 7 | 31 |
-| `check_utf8` | 680 | 550 | 240 | 980 |
-| decode UTF-8 | 240 | 370 | 210 | 650 |
-| decode GBK | 170 | 64 | 80 | 170 |
-| decode Shift_JIS | 150 | 69 | 91 | 150 |
-| decode windows-1251 | 330 | 270 | 68 | 530 |
-| `Decoder`, UTF-8 in 64 KiB chunks | 140 | 64 | 96 | 150 |
-| `Decoder`, GBK in 64 KiB chunks | 130 | 71 | 85 | 160 |
+| detect UTF-8 | 40 | 32 | 23 | 53 |
+| detect ASCII | 870 | 870 | 970 | 1,630 |
+| detect GBK | 25 | 19 | 21 | 33 |
+| detect Shift_JIS | 26 | 17 | 21 | 36 |
+| detect windows-1251 | 13 | 10 | 10 | 23 |
+| detect windows-1252 | 15 | 11 | 12 | 31 |
+| `check_utf8` | 670 | 540 | 230 | 970 |
+| decode UTF-8 | 240 | 370 | 200 | 620 |
+| decode GBK | 170 | 61 | 70 | 180 |
+| decode Shift_JIS | 150 | 68 | 85 | 160 |
+| decode windows-1251 | 330 | 260 | 63 | 650 |
+| `Decoder`, UTF-8 in 64 KiB chunks | 150 | 64 | 94 | 160 |
+| `Decoder`, GBK in 64 KiB chunks | 130 | 69 | 84 | 170 |
 
 Detection is the slow part. The detector skips ASCII before the first byte
 above 0x7F, which makes ASCII-only text fast, but scores every byte after it
-for each of its 27 candidates, as chardetng does. On js, the scores being
-64-bit integers, which JavaScript has no native type for, costs more. The
-numbers depend on the machine and the runtime;
+for each of its 27 candidates, as chardetng does. The candidates add up
+their scores in 32-bit integers within each 256 KiB, where chardetng uses
+64-bit ones, which JavaScript computes far more slowly. The numbers depend
+on the machine and the runtime;
 `moon bench --release --target <backend>` measures them again.
 
 ## Platforms

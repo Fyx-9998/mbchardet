@@ -3,29 +3,29 @@
 // constants shared with the other CJK candidates are in chinese.mbt.
 
 ///|
-const EUC_KR_SCORE_PER_EUC_HANGUL : Int64 = CJK_BASE_SCORE + 1
+const EUC_KR_SCORE_PER_EUC_HANGUL : Int32 = CJK_BASE_SCORE + 1
 
 ///|
-const EUC_KR_SCORE_PER_NON_EUC_HANGUL : Int64 = CJK_SECONDARY_BASE_SCORE / 5
+const EUC_KR_SCORE_PER_NON_EUC_HANGUL : Int32 = CJK_SECONDARY_BASE_SCORE / 5
 
 ///|
-const EUC_KR_SCORE_PER_HANJA : Int64 = CJK_SECONDARY_BASE_SCORE / 2
+const EUC_KR_SCORE_PER_HANJA : Int32 = CJK_SECONDARY_BASE_SCORE / 2
 
 ///|
-const EUC_KR_HANJA_AFTER_HANGUL_PENALTY : Int64 = -(CJK_BASE_SCORE * 10)
+const EUC_KR_HANJA_AFTER_HANGUL_PENALTY : Int32 = -(CJK_BASE_SCORE * 10)
 
 ///|
-const EUC_KR_LONG_WORD_PENALTY : Int64 = -6
+const EUC_KR_LONG_WORD_PENALTY : Int32 = -6
 
 ///|
 /// Breaks the tie in favor of GBK.
-const EUC_KR_PUA_PENALTY : Int64 = GBK_PUA_PENALTY - 1
+const EUC_KR_PUA_PENALTY : Int32 = GBK_PUA_PENALTY - 1
 
 ///|
-const EUC_KR_MAC_KOREAN_PENALTY : Int64 = EUC_KR_PUA_PENALTY * 2
+const EUC_KR_MAC_KOREAN_PENALTY : Int32 = EUC_KR_PUA_PENALTY * 2
 
 ///|
-const EUC_KR_SINGLE_BYTE_EXTENSION_PENALTY : Int64 = EUC_KR_MAC_KOREAN_PENALTY
+const EUC_KR_SINGLE_BYTE_EXTENSION_PENALTY : Int32 = EUC_KR_MAC_KOREAN_PENALTY
 
 ///|
 priv enum LatinKorean {
@@ -41,8 +41,8 @@ priv struct EucKrCandidate {
   mut prev_byte : Int32
   mut prev_was_euc_range : Bool
   mut prev : LatinKorean
-  mut current_word_len : Int64
-  mut pending_score : Int64?
+  mut current_word_len : Int32
+  mut pending_score : Int32?
 }
 
 ///|
@@ -60,8 +60,8 @@ fn EucKrCandidate::new() -> EucKrCandidate {
 ///|
 fn EucKrCandidate::maybe_set_as_pending(
   self : EucKrCandidate,
-  s : Int64,
-) -> Int64 {
+  s : Int32,
+) -> Int32 {
   if self.prev == Hangul || !more_problematic_lead(self.prev_byte) {
     s
   } else {
@@ -71,7 +71,7 @@ fn EucKrCandidate::maybe_set_as_pending(
 }
 
 ///|
-fn EucKrCandidate::take_pending(self : EucKrCandidate) -> Int64 {
+fn EucKrCandidate::take_pending(self : EucKrCandidate) -> Int32 {
   match self.pending_score {
     Some(pending) => {
       self.pending_score = None
@@ -83,8 +83,11 @@ fn EucKrCandidate::take_pending(self : EucKrCandidate) -> Int64 {
 
 ///|
 /// One more Hangul or Hanja in the current word; long words are implausible.
-fn EucKrCandidate::extend_word(self : EucKrCandidate) -> Int64 {
-  self.current_word_len += 1
+fn EucKrCandidate::extend_word(self : EucKrCandidate) -> Int32 {
+  // Saturates; only the comparison with 5 reads it.
+  if self.current_word_len < 0x7FFFFFFF {
+    self.current_word_len += 1
+  }
   if self.current_word_len > 5 {
     EUC_KR_LONG_WORD_PENALTY
   } else {
@@ -94,7 +97,7 @@ fn EucKrCandidate::extend_word(self : EucKrCandidate) -> Int64 {
 
 ///|
 /// The penalty for a Hanja right after `prev`.
-fn hanja_after(prev : LatinKorean) -> Int64 {
+fn hanja_after(prev : LatinKorean) -> Int32 {
   match prev {
     AsciiLetter => CJK_LATIN_ADJACENCY_PENALTY
     Hangul => EUC_KR_HANJA_AFTER_HANGUL_PENALTY
@@ -109,8 +112,8 @@ fn EucKrCandidate::score_unit(
   self : EucKrCandidate,
   u : Int32,
   in_euc_range : Bool,
-) -> Int64 {
-  let mut score = 0L
+) -> Int32 {
+  let mut score = 0
   if is_ascii_letter(u) {
     // Discard pending score
     self.pending_score = None
@@ -158,7 +161,7 @@ fn EucKrCandidate::feed(
   buffer : BytesView,
   last : Bool,
 ) -> Int64? {
-  let mut score = 0L
+  let mut score = 0
   for byte in buffer {
     let b = byte.to_int()
     let in_euc_range = b >= 0xA1 && b <= 0xFE
@@ -220,5 +223,5 @@ fn EucKrCandidate::feed(
   if last && self.decoder.incomplete() {
     return None
   }
-  Some(score)
+  Some(score.to_int64())
 }

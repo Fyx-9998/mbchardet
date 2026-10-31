@@ -89,6 +89,45 @@ test "scores ranks the encodings not ruled out" {
 }
 
 ///|
+test "a long input fed whole scores as fed in small chunks" {
+  // The detector scores a long input in slices; only the end of the input,
+  // not the end of a slice, counts as a space. 600 KiB of Cyrillic, Greek
+  // and Chinese text, in windows-1251, windows-1253 and GBK bytes.
+  let sentence = b"\xCD\xE0\xE4\xE5\xFE\xF1\xFC, \xE2\xFB \xED\xE5 \xF1\xEB\xE8\xF8\xEA\xEE\xEC \xEC\xED\xEE\xE3\xEE \xEF\xFC\xB8\xF2\xE5. \xC1\xE1\xE3 \xC4\xE4\xE5 \xCE\xD2\xC3\xC7\xBD\xAB "
+  let input = sentence.repeat(600 * 1024 / sentence.length() + 1)
+  let whole = @mbchardet.Detector::new()
+  whole.feed(input[:], last=true) |> ignore
+  let chunked = @mbchardet.Detector::new()
+  let mut start = 0
+  while start < input.length() {
+    let end = if input.length() - start > 1000 {
+      start + 1000
+    } else {
+      input.length()
+    }
+    chunked.feed(input[start:end], last=end == input.length()) |> ignore
+    start = end
+  }
+  // At least three slices.
+  assert_true(input.length() > 2 * 256 * 1024)
+  for encoding in @mbchardet.Detector::encodings() {
+    assert_eq(whole.score(encoding), chunked.score(encoding), msg="\{encoding}")
+  }
+  assert_true(whole.scores().length() > 1)
+  assert_eq(whole.guess(), chunked.guess())
+}
+
+///|
+test "an empty last chunk ends the input" {
+  let detector = @mbchardet.Detector::new()
+  // 你 and the lead byte of 好 in GBK.
+  detector.feed(b"\xC4\xE3\xBA"[:]) |> ignore
+  assert_true(detector.score(@mbchardet.Gbk) is Some(_))
+  detector.feed(b""[:], last=true) |> ignore
+  assert_eq(detector.score(@mbchardet.Gbk), None)
+}
+
+///|
 test "scores gives what score gives" {
   let inputs : Array[Bytes] = [
     b"", b"Zdravo \xE8\xE5\xEB\xE0 svete", b"x \x81\x98 y", b"Gr\xC3\xBC\xC3\x9Fe",

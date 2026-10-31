@@ -4,55 +4,55 @@
 // chinese.mbt.
 
 ///|
-const SHIFT_JIS_SCORE_PER_KANA : Int64 = 20
+const SHIFT_JIS_SCORE_PER_KANA : Int32 = 20
 
 ///|
-const SHIFT_JIS_SCORE_PER_LEVEL_1_KANJI : Int64 = CJK_BASE_SCORE
+const SHIFT_JIS_SCORE_PER_LEVEL_1_KANJI : Int32 = CJK_BASE_SCORE
 
 ///|
-const SHIFT_JIS_SCORE_PER_LEVEL_2_KANJI : Int64 = CJK_SECONDARY_BASE_SCORE
+const SHIFT_JIS_SCORE_PER_LEVEL_2_KANJI : Int32 = CJK_SECONDARY_BASE_SCORE
 
 ///|
 /// Manually calibrated relative to windows-1256 Persian and Urdu.
-const SHIFT_JIS_INITIAL_HALF_WIDTH_KATAKANA_PENALTY : Int64 = -75
+const SHIFT_JIS_INITIAL_HALF_WIDTH_KATAKANA_PENALTY : Int32 = -75
 
 ///|
-const HALF_WIDTH_KATAKANA_SCORE : Int64 = 1
+const HALF_WIDTH_KATAKANA_SCORE : Int32 = 1
 
 ///|
-const HALF_WIDTH_KATAKANA_VOICING_SCORE : Int64 = 10
+const HALF_WIDTH_KATAKANA_VOICING_SCORE : Int32 = 10
 
 ///|
-const SHIFT_JIS_PUA_PENALTY : Int64 = -(CJK_BASE_SCORE * 10)
+const SHIFT_JIS_PUA_PENALTY : Int32 = -(CJK_BASE_SCORE * 10)
 
 ///|
-const SHIFT_JIS_EXTENSION_PENALTY : Int64 = SHIFT_JIS_PUA_PENALTY * 2
+const SHIFT_JIS_EXTENSION_PENALTY : Int32 = SHIFT_JIS_PUA_PENALTY * 2
 
 ///|
-const SHIFT_JIS_SINGLE_BYTE_EXTENSION_PENALTY : Int64 = SHIFT_JIS_EXTENSION_PENALTY
+const SHIFT_JIS_SINGLE_BYTE_EXTENSION_PENALTY : Int32 = SHIFT_JIS_EXTENSION_PENALTY
 
 ///|
 /// Relative to Big5.
-const EUC_JP_SCORE_PER_KANA : Int64 = CJK_BASE_SCORE + CJK_BASE_SCORE / 3
+const EUC_JP_SCORE_PER_KANA : Int32 = CJK_BASE_SCORE + CJK_BASE_SCORE / 3
 
 ///|
-const EUC_JP_SCORE_PER_NEAR_OBSOLETE_KANA : Int64 = CJK_BASE_SCORE - 1
+const EUC_JP_SCORE_PER_NEAR_OBSOLETE_KANA : Int32 = CJK_BASE_SCORE - 1
 
 ///|
-const EUC_JP_SCORE_PER_LEVEL_1_KANJI : Int64 = CJK_BASE_SCORE
+const EUC_JP_SCORE_PER_LEVEL_1_KANJI : Int32 = CJK_BASE_SCORE
 
 ///|
-const EUC_JP_SCORE_PER_LEVEL_2_KANJI : Int64 = CJK_SECONDARY_BASE_SCORE
+const EUC_JP_SCORE_PER_LEVEL_2_KANJI : Int32 = CJK_SECONDARY_BASE_SCORE
 
 ///|
-const EUC_JP_SCORE_PER_OTHER_KANJI : Int64 = CJK_SECONDARY_BASE_SCORE / 4
+const EUC_JP_SCORE_PER_OTHER_KANJI : Int32 = CJK_SECONDARY_BASE_SCORE / 4
 
 ///|
-const EUC_JP_INITIAL_KANA_PENALTY : Int64 = -(CJK_BASE_SCORE / 3 + 1)
+const EUC_JP_INITIAL_KANA_PENALTY : Int32 = -(CJK_BASE_SCORE / 3 + 1)
 
 ///|
 /// Needs to be more severe than for Shift_JIS to avoid misdetecting EUC-KR.
-const EUC_JP_EXTENSION_PENALTY : Int64 = -(CJK_BASE_SCORE * 50)
+const EUC_JP_EXTENSION_PENALTY : Int32 = -(CJK_BASE_SCORE * 50)
 
 ///|
 priv enum HalfWidthKatakana {
@@ -74,7 +74,7 @@ fn half_width_katakana_voicing(
   u : Int32,
   state : HalfWidthKatakana,
   set_state : (HalfWidthKatakana) -> Unit,
-) -> Int64 {
+) -> Int32 {
   if (u >= 0xFF76 && u <= 0xFF84) || u == 0xFF73 {
     set_state(DakutenAllowed)
   } else if u >= 0xFF8A && u <= 0xFF8E {
@@ -102,7 +102,7 @@ priv struct ShiftJisCandidate {
   mut half_width_katakana_state : HalfWidthKatakana
   mut prev : LatinCj
   mut prev_byte : Int32
-  mut pending_score : Int64?
+  mut pending_score : Int32?
 }
 
 ///|
@@ -120,8 +120,8 @@ fn ShiftJisCandidate::new() -> ShiftJisCandidate {
 ///|
 fn ShiftJisCandidate::maybe_set_as_pending(
   self : ShiftJisCandidate,
-  s : Int64,
-) -> Int64 {
+  s : Int32,
+) -> Int32 {
   if self.prev == Cj || !problematic_lead(self.prev_byte) {
     s
   } else {
@@ -131,7 +131,7 @@ fn ShiftJisCandidate::maybe_set_as_pending(
 }
 
 ///|
-fn ShiftJisCandidate::take_pending(self : ShiftJisCandidate) -> Int64 {
+fn ShiftJisCandidate::take_pending(self : ShiftJisCandidate) -> Int32 {
   match self.pending_score {
     Some(pending) => {
       self.pending_score = None
@@ -147,10 +147,10 @@ fn ShiftJisCandidate::score_unit(
   self : ShiftJisCandidate,
   u : Int32,
   b : Int32,
-) -> Int64 {
+) -> Int32 {
   let state = self.half_width_katakana_state
   self.half_width_katakana_state = DakutenForbidden
-  let mut score = 0L
+  let mut score = 0
   if is_ascii_letter(u) {
     // Discard pending score
     self.pending_score = None
@@ -243,7 +243,7 @@ fn ShiftJisCandidate::feed(
   buffer : BytesView,
   last : Bool,
 ) -> Int64? {
-  let mut score = 0L
+  let mut score = 0
   for byte in buffer {
     let b = byte.to_int()
     match self.decoder.feed(b) {
@@ -276,7 +276,7 @@ fn ShiftJisCandidate::feed(
   if last && self.decoder.incomplete() {
     return None
   }
-  Some(score)
+  Some(score.to_int64())
 }
 
 ///|
@@ -303,10 +303,10 @@ fn EucJpCandidate::new() -> EucJpCandidate {
 
 ///|
 /// The score of one decoded character `u`.
-fn EucJpCandidate::score_unit(self : EucJpCandidate, u : Int32) -> Int64 {
+fn EucJpCandidate::score_unit(self : EucJpCandidate, u : Int32) -> Int32 {
   let state = self.half_width_katakana_state
   self.half_width_katakana_state = DakutenForbidden
-  let mut score = 0L
+  let mut score = 0
   if !self.non_ascii_seen && u >= 0x80 {
     self.non_ascii_seen = true
     if u >= 0x3040 && u < 0x3100 {
@@ -396,7 +396,7 @@ fn EucJpCandidate::feed(
   buffer : BytesView,
   last : Bool,
 ) -> Int64? {
-  let mut score = 0L
+  let mut score = 0
   for byte in buffer {
     let b = byte.to_int()
     match self.decoder.feed(b) {
@@ -419,7 +419,7 @@ fn EucJpCandidate::feed(
   if last && self.decoder.incomplete() {
     return None
   }
-  Some(score)
+  Some(score.to_int64())
 }
 
 ///|

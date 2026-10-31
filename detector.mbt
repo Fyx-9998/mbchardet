@@ -41,16 +41,44 @@ fn Inner::feed_single_byte(self : Inner, buffer : BytesView) -> Int64? {
 /// The score change from `buffer`, or `None` if `buffer` rules the encoding
 /// out.
 fn Inner::feed(self : Inner, buffer : BytesView, last : Bool) -> Int64? {
-  match self {
-    Utf8Check(validator) => {
-      if !validator.feed(buffer) {
-        return None
-      }
-      if last && validator.finish() is Invalid(_) {
-        return None
-      }
-      return Some(0)
+  if self is Utf8Check(validator) {
+    if !validator.feed(buffer) {
+      return None
     }
+    if last && validator.finish() is Invalid(_) {
+      return None
+    }
+    return Some(0)
+  }
+  // The candidates add up a score in Int within a call, where chardetng uses
+  // i64: no byte changes it by more than 4096, so a slice of 256 KiB cannot
+  // overflow it.
+  let mut score = 0L
+  let mut start = 0
+  while true {
+    let end = if buffer.length() - start > 0x40000 {
+      start + 0x40000
+    } else {
+      buffer.length()
+    }
+    let slice = buffer[start:end]
+    guard self.feed_slice(slice, last && end == buffer.length()) is Some(change) else {
+      return None
+    }
+    score += change
+    if end == buffer.length() {
+      break
+    }
+    start = end
+  }
+  Some(score)
+}
+
+///|
+/// The score change from at most 256 KiB, or `None` if they rule the
+/// encoding out.
+fn Inner::feed_slice(self : Inner, buffer : BytesView, last : Bool) -> Int64? {
+  match self {
     Gbk(c) => return c.feed(buffer, last)
     Big5(c) => return c.feed(buffer, last)
     ShiftJis(c) => return c.feed(buffer, last)

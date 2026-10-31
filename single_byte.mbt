@@ -1,32 +1,35 @@
 // The single-byte candidates of chardetng 1.0.0, ported from src/lib.rs
 // (Apache-2.0 OR MIT, Copyright Mozilla Foundation) and the scoring code of
 // src/data.rs (CC0 1.0). See NOTICE. Names and constants follow chardetng so
-// the two can be compared line by line.
+// the two can be compared line by line. Scores within one call and word
+// lengths are Int where chardetng uses i64 and u64: Inner::feed in
+// detector.mbt keeps the scores of a call from overflowing, and the word
+// lengths saturate at 2147483647 letters, which only a longer word notices.
 
 ///|
-const LATIN_ADJACENCY_PENALTY : Int64 = -50
+const LATIN_ADJACENCY_PENALTY : Int32 = -50
 
 ///|
-const IMPLAUSIBILITY_PENALTY : Int64 = -220
+const IMPLAUSIBILITY_PENALTY : Int32 = -220
 
 ///|
-const ORDINAL_BONUS : Int64 = 300
+const ORDINAL_BONUS : Int32 = 300
 
 ///|
 /// Must match the ISO-8859-2 score for " Š ".
-const COPYRIGHT_BONUS : Int64 = 222
+const COPYRIGHT_BONUS : Int32 = 222
 
 ///|
-const IMPLAUSIBLE_LATIN_CASE_TRANSITION_PENALTY : Int64 = -180
+const IMPLAUSIBLE_LATIN_CASE_TRANSITION_PENALTY : Int32 = -180
 
 ///|
-const NON_LATIN_CAPITALIZATION_BONUS : Int64 = 40
+const NON_LATIN_CAPITALIZATION_BONUS : Int32 = 40
 
 ///|
-const NON_LATIN_ALL_CAPS_PENALTY : Int64 = -40
+const NON_LATIN_ALL_CAPS_PENALTY : Int32 = -40
 
 ///|
-const NON_LATIN_MIXED_CASE_PENALTY : Int64 = -20
+const NON_LATIN_MIXED_CASE_PENALTY : Int32 = -20
 
 ///|
 /// Caseless class of Latin letters.
@@ -130,7 +133,7 @@ fn SingleByteData::score(
   current_class : Int32,
   previous_class : Int32,
   is_windows_1256 : Bool,
-) -> Int64 {
+) -> Int32 {
   let stored_boundary = self.ascii + self.non_ascii
   if current_class < stored_boundary {
     if previous_class < stored_boundary {
@@ -148,7 +151,7 @@ fn SingleByteData::score(
       if b == 255 {
         IMPLAUSIBILITY_PENALTY
       } else {
-        b.to_int64()
+        b
       }
     } else if current_class == 0 ||
       current_class == ASCII_DIGIT ||
@@ -244,8 +247,8 @@ priv struct NonLatinCasedCandidate {
   mut prev : Int32
   mut case_state : NonLatinCaseState
   mut prev_ascii : Bool
-  mut current_word_len : Int64
-  mut longest_word : Int64
+  mut current_word_len : Int32
+  mut longest_word : Int32
   ibm866 : Bool
   // Only used with IBM866
   mut prev_was_a0 : Bool
@@ -270,7 +273,9 @@ fn NonLatinCasedCandidate::feed(
   self : NonLatinCasedCandidate,
   buffer : BytesView,
 ) -> Int64? {
-  let mut score = 0L
+  let mut score = 0
+  // Grows with the length of a word, so kept apart in Int64.
+  let mut word_penalties = 0L
   for byte in buffer {
     let b = byte.to_int()
     let class = self.data.classify(b)
@@ -303,7 +308,9 @@ fn NonLatinCasedCandidate::feed(
             score += NON_LATIN_ALL_CAPS_PENALTY
           }
         // Per letter
-        Mix => score += NON_LATIN_MIXED_CASE_PENALTY * self.current_word_len
+        Mix =>
+          word_penalties += NON_LATIN_MIXED_CASE_PENALTY.to_int64() *
+            self.current_word_len.to_int64()
       }
       self.case_state = Space
     } else if class >> 7 == 0 {
@@ -324,7 +331,9 @@ fn NonLatinCasedCandidate::feed(
       }
     }
     if non_ascii_alphabetic {
-      self.current_word_len += 1
+      if self.current_word_len < 0x7FFFFFFF {
+        self.current_word_len += 1
+      }
     } else {
       if self.current_word_len > self.longest_word {
         self.longest_word = self.current_word_len
@@ -353,7 +362,7 @@ fn NonLatinCasedCandidate::feed(
     self.prev = caseless_class
     self.prev_was_a0 = is_a0
   }
-  Some(score)
+  Some(score.to_int64() + word_penalties)
 }
 
 ///|
@@ -406,7 +415,7 @@ fn is_small_roman(caseless_class : Int32) -> Bool {
 
 ///|
 fn LatinCandidate::feed(self : LatinCandidate, buffer : BytesView) -> Int64? {
-  let mut score = 0L
+  let mut score = 0
   for byte in buffer {
     let b = byte.to_int()
     let class = self.data.classify(b)
@@ -416,7 +425,7 @@ fn LatinCandidate::feed(self : LatinCandidate, buffer : BytesView) -> Int64? {
     let caseless_class = class & 0x7F
     let ascii = b < 0x80
     let ascii_pair = self.prev_non_ascii == 0 && ascii
-    let non_ascii_penalty : Int64 = match self.prev_non_ascii {
+    let non_ascii_penalty : Int32 = match self.prev_non_ascii {
       0 | 1 | 2 => 0
       3 => -5
       4 => -20
@@ -465,7 +474,7 @@ fn LatinCandidate::feed(self : LatinCandidate, buffer : BytesView) -> Int64? {
     }
     self.prev = caseless_class
   }
-  Some(score)
+  Some(score.to_int64())
 }
 
 ///|
@@ -478,8 +487,8 @@ fn LatinCandidate::ordinal(
   self : LatinCandidate,
   byte : Byte,
   caseless_class : Int32,
-) -> Int64 {
-  let mut score = 0L
+) -> Int32 {
+  let mut score = 0
   match self.ordinal_state {
     Other => if caseless_class == 0 { self.ordinal_state = Space }
     Space =>
@@ -615,8 +624,8 @@ priv struct ArabicFrenchCandidate {
   mut prev : Int32
   mut case_state : LatinCaseState
   mut prev_ascii : Bool
-  mut current_word_len : Int64
-  mut longest_word : Int64
+  mut current_word_len : Int32
+  mut longest_word : Int32
 }
 
 ///|
@@ -636,7 +645,7 @@ fn ArabicFrenchCandidate::feed(
   self : ArabicFrenchCandidate,
   buffer : BytesView,
 ) -> Int64? {
-  let mut score = 0L
+  let mut score = 0
   for byte in buffer {
     let b = byte.to_int()
     let class = self.data.classify(b)
@@ -672,7 +681,9 @@ fn ArabicFrenchCandidate::feed(
       caseless_class, true,
     )
     if non_ascii_alphabetic {
-      self.current_word_len += 1
+      if self.current_word_len < 0x7FFFFFFF {
+        self.current_word_len += 1
+      }
     } else {
       if self.current_word_len > self.longest_word {
         self.longest_word = self.current_word_len
@@ -691,7 +702,7 @@ fn ArabicFrenchCandidate::feed(
     self.prev_ascii = ascii
     self.prev = caseless_class
   }
-  Some(score)
+  Some(score.to_int64())
 }
 
 ///|
@@ -699,8 +710,8 @@ priv struct CaselessCandidate {
   data : SingleByteData
   mut prev : Int32
   mut prev_ascii : Bool
-  mut current_word_len : Int64
-  mut longest_word : Int64
+  mut current_word_len : Int32
+  mut longest_word : Int32
 }
 
 ///|
@@ -713,7 +724,7 @@ fn CaselessCandidate::feed(
   self : CaselessCandidate,
   buffer : BytesView,
 ) -> Int64? {
-  let mut score = 0L
+  let mut score = 0
   for byte in buffer {
     let b = byte.to_int()
     let class = self.data.classify(b)
@@ -727,7 +738,9 @@ fn CaselessCandidate::feed(
       caseless_class, false,
     )
     if non_ascii_alphabetic {
-      self.current_word_len += 1
+      if self.current_word_len < 0x7FFFFFFF {
+        self.current_word_len += 1
+      }
     } else {
       if self.current_word_len > self.longest_word {
         self.longest_word = self.current_word_len
@@ -746,7 +759,7 @@ fn CaselessCandidate::feed(
     self.prev_ascii = ascii
     self.prev = caseless_class
   }
-  Some(score)
+  Some(score.to_int64())
 }
 
 ///|
@@ -764,8 +777,8 @@ priv struct LogicalCandidate {
   mut prev_ascii : Bool
   // Punctuation right after a Hebrew letter, as logical order puts it.
   mut plausible_punctuation : Int64
-  mut current_word_len : Int64
-  mut longest_word : Int64
+  mut current_word_len : Int32
+  mut longest_word : Int32
 }
 
 ///|
@@ -785,7 +798,7 @@ fn LogicalCandidate::feed(
   self : LogicalCandidate,
   buffer : BytesView,
 ) -> Int64? {
-  let mut score = 0L
+  let mut score = 0
   for byte in buffer {
     let b = byte.to_int()
     let class = self.data.classify(b)
@@ -799,7 +812,9 @@ fn LogicalCandidate::feed(
       caseless_class, false,
     )
     if non_ascii_alphabetic {
-      self.current_word_len += 1
+      if self.current_word_len < 0x7FFFFFFF {
+        self.current_word_len += 1
+      }
     } else {
       if self.current_word_len > self.longest_word {
         self.longest_word = self.current_word_len
@@ -826,7 +841,7 @@ fn LogicalCandidate::feed(
     self.prev_ascii = ascii
     self.prev = caseless_class
   }
-  Some(score)
+  Some(score.to_int64())
 }
 
 ///|
@@ -838,8 +853,8 @@ priv struct VisualCandidate {
   mut prev_punctuation : Bool
   // Hebrew letters right after punctuation, as visual order puts them.
   mut plausible_punctuation : Int64
-  mut current_word_len : Int64
-  mut longest_word : Int64
+  mut current_word_len : Int32
+  mut longest_word : Int32
 }
 
 ///|
@@ -857,7 +872,7 @@ fn VisualCandidate::new(data : SingleByteData) -> VisualCandidate {
 
 ///|
 fn VisualCandidate::feed(self : VisualCandidate, buffer : BytesView) -> Int64? {
-  let mut score = 0L
+  let mut score = 0
   for byte in buffer {
     let b = byte.to_int()
     let class = self.data.classify(b)
@@ -871,7 +886,9 @@ fn VisualCandidate::feed(self : VisualCandidate, buffer : BytesView) -> Int64? {
       caseless_class, false,
     )
     if non_ascii_alphabetic {
-      self.current_word_len += 1
+      if self.current_word_len < 0x7FFFFFFF {
+        self.current_word_len += 1
+      }
     } else {
       if self.current_word_len > self.longest_word {
         self.longest_word = self.current_word_len
@@ -894,5 +911,5 @@ fn VisualCandidate::feed(self : VisualCandidate, buffer : BytesView) -> Int64? {
     self.prev = caseless_class
     self.prev_punctuation = caseless_class == 0 && is_ascii_punctuation(byte)
   }
-  Some(score)
+  Some(score.to_int64())
 }

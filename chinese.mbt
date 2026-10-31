@@ -3,48 +3,48 @@
 
 ///|
 /// Manually calibrated relative to windows-1256 Arabic.
-const CJK_BASE_SCORE : Int64 = 41
+const CJK_BASE_SCORE : Int32 = 41
 
 ///|
-const CJK_SECONDARY_BASE_SCORE : Int64 = 20
+const CJK_SECONDARY_BASE_SCORE : Int32 = 20
 
 ///|
-const BIG5_SCORE_PER_LEVEL_1_HANZI : Int64 = CJK_BASE_SCORE
+const BIG5_SCORE_PER_LEVEL_1_HANZI : Int32 = CJK_BASE_SCORE
 
 ///|
-const BIG5_SCORE_PER_OTHER_HANZI : Int64 = CJK_SECONDARY_BASE_SCORE
+const BIG5_SCORE_PER_OTHER_HANZI : Int32 = CJK_SECONDARY_BASE_SCORE
 
 ///|
 /// More severe than other PUA penalties to avoid misdetecting EUC-KR.
-const BIG5_PUA_PENALTY : Int64 = -(CJK_BASE_SCORE * 30)
+const BIG5_PUA_PENALTY : Int32 = -(CJK_BASE_SCORE * 30)
 
 ///|
-const BIG5_SINGLE_BYTE_EXTENSION_PENALTY : Int64 = -(CJK_BASE_SCORE * 40)
+const BIG5_SINGLE_BYTE_EXTENSION_PENALTY : Int32 = -(CJK_BASE_SCORE * 40)
 
 ///|
-const GBK_SCORE_PER_LEVEL_1 : Int64 = CJK_BASE_SCORE
+const GBK_SCORE_PER_LEVEL_1 : Int32 = CJK_BASE_SCORE
 
 ///|
-const GBK_SCORE_PER_LEVEL_2 : Int64 = CJK_SECONDARY_BASE_SCORE
+const GBK_SCORE_PER_LEVEL_2 : Int32 = CJK_SECONDARY_BASE_SCORE
 
 ///|
-const GBK_SCORE_PER_NON_EUC : Int64 = CJK_SECONDARY_BASE_SCORE / 4
+const GBK_SCORE_PER_NON_EUC : Int32 = CJK_SECONDARY_BASE_SCORE / 4
 
 ///|
-const GBK_PUA_PENALTY : Int64 = -(CJK_BASE_SCORE * 10)
+const GBK_PUA_PENALTY : Int32 = -(CJK_BASE_SCORE * 10)
 
 ///|
-const GBK_SINGLE_BYTE_EXTENSION_PENALTY : Int64 = GBK_PUA_PENALTY * 4
+const GBK_SINGLE_BYTE_EXTENSION_PENALTY : Int32 = GBK_PUA_PENALTY * 4
 
 ///|
 /// Smaller than LATIN_ADJACENCY_PENALTY.
-const CJK_LATIN_ADJACENCY_PENALTY : Int64 = -CJK_BASE_SCORE
+const CJK_LATIN_ADJACENCY_PENALTY : Int32 = -CJK_BASE_SCORE
 
 ///|
-const CJ_PUNCTUATION : Int64 = CJK_BASE_SCORE / 2
+const CJ_PUNCTUATION : Int32 = CJK_BASE_SCORE / 2
 
 ///|
-const CJK_OTHER : Int64 = CJK_SECONDARY_BASE_SCORE / 4
+const CJK_OTHER : Int32 = CJK_SECONDARY_BASE_SCORE / 4
 
 ///|
 priv enum LatinCj {
@@ -56,10 +56,10 @@ priv enum LatinCj {
 ///|
 /// A bonus for the 128 most frequent characters in `table`, larger for the
 /// more frequent.
-fn cjk_extra_score(u : Int32, table : FixedArray[Int32]) -> Int64 {
+fn cjk_extra_score(u : Int32, table : FixedArray[Int32]) -> Int32 {
   for i, frequent in table {
     if frequent == u {
-      return ((128 - i) / 16).to_int64()
+      return (128 - i) / 16
     }
   }
   0
@@ -103,7 +103,7 @@ priv struct GbkCandidate {
   decoder : GbkDecoder
   mut prev_byte : Int32
   mut prev : LatinCj
-  mut pending_score : Int64?
+  mut pending_score : Int32?
 }
 
 ///|
@@ -117,7 +117,7 @@ fn GbkCandidate::new() -> GbkCandidate {
 }
 
 ///|
-fn GbkCandidate::maybe_set_as_pending(self : GbkCandidate, s : Int64) -> Int64 {
+fn GbkCandidate::maybe_set_as_pending(self : GbkCandidate, s : Int32) -> Int32 {
   if self.prev == Cj || !more_problematic_lead(self.prev_byte) {
     s
   } else {
@@ -128,7 +128,7 @@ fn GbkCandidate::maybe_set_as_pending(self : GbkCandidate, s : Int64) -> Int64 {
 
 ///|
 /// Adds the pending score, if any, to the score of this byte.
-fn GbkCandidate::take_pending(self : GbkCandidate) -> Int64 {
+fn GbkCandidate::take_pending(self : GbkCandidate) -> Int32 {
   match self.pending_score {
     Some(pending) => {
       self.pending_score = None
@@ -140,8 +140,8 @@ fn GbkCandidate::take_pending(self : GbkCandidate) -> Int64 {
 
 ///|
 /// The score of one decoded BMP character `u`, `b` being its last byte.
-fn GbkCandidate::score_bmp(self : GbkCandidate, u : Int32, b : Int32) -> Int64 {
-  let mut score = 0L
+fn GbkCandidate::score_bmp(self : GbkCandidate, u : Int32, b : Int32) -> Int32 {
+  let mut score = 0
   if is_ascii_letter(u) {
     // Discard pending score
     self.pending_score = None
@@ -222,7 +222,7 @@ fn GbkCandidate::score_bmp(self : GbkCandidate, u : Int32, b : Int32) -> Int64 {
 ///|
 /// The score of a character outside the BMP, `high` being its high
 /// surrogate.
-fn GbkCandidate::score_astral(self : GbkCandidate, high : Int32) -> Int64 {
+fn GbkCandidate::score_astral(self : GbkCandidate, high : Int32) -> Int32 {
   let mut score = self.take_pending()
   if high >= 0xDB80 && high <= 0xDBFF {
     score += GBK_PUA_PENALTY
@@ -246,7 +246,7 @@ fn GbkCandidate::feed(
   buffer : BytesView,
   last : Bool,
 ) -> Int64? {
-  let mut score = 0L
+  let mut score = 0
   for byte in buffer {
     let b = byte.to_int()
     match self.decoder.feed(b) {
@@ -290,7 +290,7 @@ fn GbkCandidate::feed(
   if last && self.decoder.incomplete() {
     return None
   }
-  Some(score)
+  Some(score.to_int64())
 }
 
 ///|
@@ -298,7 +298,7 @@ priv struct Big5Candidate {
   decoder : Big5Decoder
   mut prev : LatinCj
   mut prev_byte : Int32
-  mut pending_score : Int64?
+  mut pending_score : Int32?
 }
 
 ///|
@@ -314,8 +314,8 @@ fn Big5Candidate::new() -> Big5Candidate {
 ///|
 fn Big5Candidate::maybe_set_as_pending(
   self : Big5Candidate,
-  s : Int64,
-) -> Int64 {
+  s : Int32,
+) -> Int32 {
   if self.prev == Cj || !problematic_lead(self.prev_byte) {
     s
   } else {
@@ -325,7 +325,7 @@ fn Big5Candidate::maybe_set_as_pending(
 }
 
 ///|
-fn Big5Candidate::take_pending(self : Big5Candidate) -> Int64 {
+fn Big5Candidate::take_pending(self : Big5Candidate) -> Int32 {
   match self.pending_score {
     Some(pending) => {
       self.pending_score = None
@@ -336,8 +336,8 @@ fn Big5Candidate::take_pending(self : Big5Candidate) -> Int64 {
 }
 
 ///|
-fn Big5Candidate::score_bmp(self : Big5Candidate, u : Int32) -> Int64 {
-  let mut score = 0L
+fn Big5Candidate::score_bmp(self : Big5Candidate, u : Int32) -> Int32 {
+  let mut score = 0
   if is_ascii_letter(u) {
     // Discard pending score
     self.pending_score = None
@@ -377,7 +377,7 @@ fn Big5Candidate::score_bmp(self : Big5Candidate, u : Int32) -> Int64 {
 ///|
 /// The score of two code units: a base letter with a combining mark, or a
 /// surrogate pair.
-fn Big5Candidate::score_pair(self : Big5Candidate, first : Int32) -> Int64 {
+fn Big5Candidate::score_pair(self : Big5Candidate, first : Int32) -> Int32 {
   let mut score = self.take_pending()
   if first == 0xCA || first == 0xEA {
     score += CJK_OTHER
@@ -398,7 +398,7 @@ fn Big5Candidate::feed(
   buffer : BytesView,
   last : Bool,
 ) -> Int64? {
-  let mut score = 0L
+  let mut score = 0
   for byte in buffer {
     let b = byte.to_int()
     match self.decoder.feed(b) {
@@ -453,5 +453,5 @@ fn Big5Candidate::feed(
   if last && self.decoder.incomplete() {
     return None
   }
-  Some(score)
+  Some(score.to_int64())
 }
