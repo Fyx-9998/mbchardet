@@ -758,6 +758,40 @@ python tools/gen_xml_data.py WHATWG_DIR/encodings.json xml_data_test.mbt
 moon fmt
 ```
 
+## Performance
+
+`bench_test.mbt` holds benchmarks, which `moon bench` runs and `moon test`
+does not. Each input has 256 KiB of corpus sentences repeated: UTF-8 in 40
+languages, English (ASCII only), Chinese in GBK, Japanese in Shift_JIS,
+Cyrillic in windows-1251 and Western European languages in windows-1252.
+`detect` feeds a new `Detector` the whole input and guesses; `decode` is
+`Encoding::decode`. On an Intel Core i9-14900HX, with MoonBit 0.10.18 in
+release mode (wasm and wasm-gc in `moonrun`, js in Node.js 24.20, native
+built by GCC 12.5 on Ubuntu under WSL), the throughput in MB/s was:
+
+| | wasm-gc | wasm | js | native |
+|---|---:|---:|---:|---:|
+| detect UTF-8 | 41 | 32 | 18 | 56 |
+| detect ASCII | 890 | 870 | 1,030 | 1,530 |
+| detect GBK | 26 | 18 | 14 | 36 |
+| detect Shift_JIS | 26 | 16 | 14 | 38 |
+| detect windows-1251 | 13 | 11 | 6 | 24 |
+| detect windows-1252 | 15 | 11 | 7 | 31 |
+| `check_utf8` | 680 | 550 | 240 | 980 |
+| decode UTF-8 | 240 | 370 | 210 | 650 |
+| decode GBK | 170 | 64 | 80 | 170 |
+| decode Shift_JIS | 150 | 69 | 91 | 150 |
+| decode windows-1251 | 330 | 270 | 68 | 530 |
+| `Decoder`, UTF-8 in 64 KiB chunks | 140 | 64 | 96 | 150 |
+| `Decoder`, GBK in 64 KiB chunks | 130 | 71 | 85 | 160 |
+
+Detection is the slow part. The detector skips ASCII before the first byte
+above 0x7F, which makes ASCII-only text fast, but scores every byte after it
+for each of its 27 candidates, as chardetng does. On js, the scores being
+64-bit integers, which JavaScript has no native type for, costs more. The
+numbers depend on the machine and the runtime;
+`moon bench --release --target <backend>` measures them again.
+
 ## Platforms
 
 The library is pure MoonBit with no dependencies. The command-line tool also

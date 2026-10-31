@@ -191,6 +191,8 @@ Tatoeba
   text. README.mbt.md, cmd/main/main_wbtest.mbt, demo/demo_test.mbt and
   tools/check_demo.mjs quote some of them with their ids; demo/app.js holds
   four of them, encoded, as samples, and demo/index.html lists their ids.
+  bench_test.mbt repeats those of golden_data_test.mbt as the inputs of the
+  benchmarks.
 
 Tools
   tools/golden builds against the crates chardetng 1.0.0 (Apache-2.0 OR MIT)

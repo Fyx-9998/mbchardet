@@ -234,6 +234,14 @@ test "Decoder: errors count offsets from the start of the input" {
     refused(Gbk, 3, Some(1)),
     refused(Gbk, 3, Some(1)),
   ])
+  // The same for a single-byte encoding, which reads its table directly:
+  // windows-1253 does not use 0xAA.
+  assert_eq(streamed(Windows1253, [b"ab", b"\xE1\xAA", b"d"]), [
+    Ok("ab"),
+    refused(Windows1253, 3, Some(1)),
+    refused(Windows1253, 3, Some(1)),
+    refused(Windows1253, 3, Some(1)),
+  ])
   // The malformed sequence starts in an earlier chunk; the byte that
   // interrupts it is not part of it.
   assert_eq(streamed(Utf8, [b"x\xE4", b"\xB8", b"A"]), [

@@ -93,93 +93,98 @@ pub fn Encoding::decode(
 }
 
 ///|
-/// The decoder of this encoding, one byte at a time: a function that takes
-/// the next byte, and one that tells whether the decoder is inside a
-/// sequence, which the end of the input would cut.
-fn Encoding::stepper(self : Encoding) -> ((Int32) -> Step, () -> Bool) {
-  let single_byte = (index : Bytes) => {
-    let feed = b => {
-      if b < 0x80 {
-        return Unit(b)
-      }
-      let code_point = (index[2 * (b - 0x80)].to_int() << 8) |
-        index[2 * (b - 0x80) + 1].to_int()
-      if code_point == 0 {
-        Malformed(1)
-      } else {
-        Unit(code_point)
-      }
-    }
-    (feed, () => false)
+/// The table of a single-byte encoding: for each byte from 0x80 on, the code
+/// point in two bytes, big-endian, or 0 for a byte the encoding does not
+/// use. `None` for the other encodings.
+fn Encoding::single_byte_index(self : Encoding) -> Bytes? {
+  match self {
+    Ibm866 => Some(index_ibm866)
+    Iso8859_2 => Some(index_iso_8859_2)
+    Iso8859_3 => Some(index_iso_8859_3)
+    Iso8859_4 => Some(index_iso_8859_4)
+    Iso8859_5 => Some(index_iso_8859_5)
+    Iso8859_6 => Some(index_iso_8859_6)
+    Iso8859_7 => Some(index_iso_8859_7)
+    Iso8859_8 | Iso8859_8I => Some(index_iso_8859_8)
+    Iso8859_10 => Some(index_iso_8859_10)
+    Iso8859_13 => Some(index_iso_8859_13)
+    Iso8859_14 => Some(index_iso_8859_14)
+    Iso8859_15 => Some(index_iso_8859_15)
+    Iso8859_16 => Some(index_iso_8859_16)
+    Koi8R => Some(index_koi8_r)
+    Koi8U => Some(index_koi8_u)
+    Macintosh => Some(index_macintosh)
+    Windows874 => Some(index_windows_874)
+    Windows1250 => Some(index_windows_1250)
+    Windows1251 => Some(index_windows_1251)
+    Windows1252 => Some(index_windows_1252)
+    Windows1253 => Some(index_windows_1253)
+    Windows1254 => Some(index_windows_1254)
+    Windows1255 => Some(index_windows_1255)
+    Windows1256 => Some(index_windows_1256)
+    Windows1257 => Some(index_windows_1257)
+    Windows1258 => Some(index_windows_1258)
+    XMacCyrillic => Some(index_x_mac_cyrillic)
+    _ => None
+  }
+}
+
+///|
+/// How a `Decoder` reads bytes: through the table of a single-byte encoding,
+/// or with a decoder that takes one byte at a time and one that tells
+/// whether that decoder is inside a sequence, which the end of the input
+/// would cut.
+priv enum Bytewise {
+  Table(Bytes)
+  Stepper((Int32) -> Step, () -> Bool)
+}
+
+///|
+fn Encoding::bytewise(self : Encoding) -> Bytewise {
+  if self.single_byte_index() is Some(index) {
+    return Table(index)
   }
   match self {
     Utf8 => {
       let decoder = Utf8Decoder::new()
-      (b => decoder.feed(b), () => decoder.incomplete())
+      Stepper(b => decoder.feed(b), () => decoder.incomplete())
     }
     Utf16Be | Utf16Le => {
       let decoder = Utf16Decoder::new(big_endian=self == Utf16Be)
-      (b => decoder.feed(b), () => decoder.incomplete())
+      Stepper(b => decoder.feed(b), () => decoder.incomplete())
     }
     Gbk | Gb18030 => {
       let decoder = GbkDecoder::new()
-      (b => decoder.feed(b), () => decoder.incomplete())
+      Stepper(b => decoder.feed(b), () => decoder.incomplete())
     }
     Big5 => {
       let decoder = Big5Decoder::new()
-      (b => decoder.feed(b), () => decoder.incomplete())
+      Stepper(b => decoder.feed(b), () => decoder.incomplete())
     }
     ShiftJis => {
       let decoder = ShiftJisDecoder::new()
-      (b => decoder.feed(b), () => decoder.incomplete())
+      Stepper(b => decoder.feed(b), () => decoder.incomplete())
     }
     EucJp => {
       let decoder = EucJpDecoder::new()
-      (b => decoder.feed(b), () => decoder.incomplete())
+      Stepper(b => decoder.feed(b), () => decoder.incomplete())
     }
     Iso2022Jp => {
       let decoder = Iso2022JpDecoder::new()
-      (b => decoder.feed(b), () => decoder.incomplete())
+      Stepper(b => decoder.feed(b), () => decoder.incomplete())
     }
     EucKr => {
       let decoder = EucKrDecoder::new()
-      (b => decoder.feed(b), () => decoder.incomplete())
+      Stepper(b => decoder.feed(b), () => decoder.incomplete())
     }
     // Any byte is in error: the Encoding Standard does not decode the
     // encodings this one stands for.
-    Replacement => (_ => Malformed(1), () => false)
+    Replacement => Stepper(_ => Malformed(1), () => false)
     XUserDefined =>
-      (
-        b => if b < 0x80 { Unit(b) } else { Unit(0xF780 + b - 0x80) },
-        () => false,
-      )
-    Ibm866 => single_byte(index_ibm866)
-    Iso8859_2 => single_byte(index_iso_8859_2)
-    Iso8859_3 => single_byte(index_iso_8859_3)
-    Iso8859_4 => single_byte(index_iso_8859_4)
-    Iso8859_5 => single_byte(index_iso_8859_5)
-    Iso8859_6 => single_byte(index_iso_8859_6)
-    Iso8859_7 => single_byte(index_iso_8859_7)
-    Iso8859_8 | Iso8859_8I => single_byte(index_iso_8859_8)
-    Iso8859_10 => single_byte(index_iso_8859_10)
-    Iso8859_13 => single_byte(index_iso_8859_13)
-    Iso8859_14 => single_byte(index_iso_8859_14)
-    Iso8859_15 => single_byte(index_iso_8859_15)
-    Iso8859_16 => single_byte(index_iso_8859_16)
-    Koi8R => single_byte(index_koi8_r)
-    Koi8U => single_byte(index_koi8_u)
-    Macintosh => single_byte(index_macintosh)
-    Windows874 => single_byte(index_windows_874)
-    Windows1250 => single_byte(index_windows_1250)
-    Windows1251 => single_byte(index_windows_1251)
-    Windows1252 => single_byte(index_windows_1252)
-    Windows1253 => single_byte(index_windows_1253)
-    Windows1254 => single_byte(index_windows_1254)
-    Windows1255 => single_byte(index_windows_1255)
-    Windows1256 => single_byte(index_windows_1256)
-    Windows1257 => single_byte(index_windows_1257)
-    Windows1258 => single_byte(index_windows_1258)
-    XMacCyrillic => single_byte(index_x_mac_cyrillic)
+      Stepper(b => if b < 0x80 { Unit(b) } else { Unit(0xF780 + b - 0x80) }, () => {
+        false
+      })
+    _ => abort("\{self} has a table")
   }
 }
 
@@ -199,8 +204,7 @@ fn Encoding::stepper(self : Encoding) -> ((Int32) -> Step, () -> Bool) {
 /// After an error, `decode` and `finish` return that error again.
 struct Decoder {
   encoding : Encoding
-  feed : (Int32) -> Step
-  incomplete : () -> Bool
+  bytewise : Bytewise
   // Bytes in the chunks decoded before.
   mut consumed : Int32
   // The offset of the first byte of the sequence being read.
@@ -215,11 +219,9 @@ struct Decoder {
 ///|
 /// A decoder from `encoding` that has seen no input yet.
 pub fn Decoder::new(encoding : Encoding) -> Decoder {
-  let (feed, incomplete) = encoding.stepper()
   {
     encoding,
-    feed,
-    incomplete,
+    bytewise: encoding.bytewise(),
     consumed: 0,
     first: 0,
     before_bom: encoding is (Utf8 | Utf16Be | Utf16Le),
@@ -265,12 +267,16 @@ pub fn Decoder::decode(
   if chunk.length() > 0x7FFFFFFF - self.consumed {
     abort("Decoder::decode: more than 2147483647 bytes in all")
   }
+  let (feed, incomplete) = match self.bytewise {
+    Table(index) => return self.decode_table(index, chunk)
+    Stepper(feed, incomplete) => (feed, incomplete)
+  }
   let text = StringBuilder(size_hint=chunk.length())
   for i in 0..<chunk.length() {
-    if !(self.incomplete)() {
+    if !incomplete() {
       self.first = self.consumed + i
     }
-    match (self.feed)(chunk[i].to_int()) {
+    match feed(chunk[i].to_int()) {
       Pending => ()
       Unit(unit) => self.write(text, unit)
       Units(high, low) if high >= 0xD800 && high <= 0xDBFF =>
@@ -305,6 +311,38 @@ pub fn Decoder::decode(
 }
 
 ///|
+/// `decode` for a single-byte encoding with this table: each byte is one
+/// character, or a malformed sequence of one byte.
+fn Decoder::decode_table(
+  self : Decoder,
+  index : Bytes,
+  chunk : BytesView,
+) -> Result[String, DecodeError] {
+  let text = StringBuilder(size_hint=chunk.length())
+  for i in 0..<chunk.length() {
+    let b = chunk[i].to_int()
+    if b < 0x80 {
+      text.write_char(b.unsafe_to_char())
+      continue
+    }
+    let code_point = (index[2 * (b - 0x80)].to_int() << 8) |
+      index[2 * (b - 0x80) + 1].to_int()
+    if code_point == 0 {
+      let error = {
+        encoding: self.encoding,
+        valid_up_to: self.consumed + i,
+        error_len: Some(1),
+      }
+      self.error = Some(error)
+      return Err(error)
+    }
+    text.write_char(code_point.unsafe_to_char())
+  }
+  self.consumed += chunk.length()
+  Ok(text.to_string())
+}
+
+///|
 /// Ends the input: an error if it ends inside a character, with `error_len`
 /// `None`. Calling `finish` again gives the same answer.
 pub fn Decoder::finish(self : Decoder) -> Result[Unit, DecodeError] {
@@ -312,7 +350,7 @@ pub fn Decoder::finish(self : Decoder) -> Result[Unit, DecodeError] {
     return Err(error)
   }
   self.finished = true
-  if (self.incomplete)() {
+  if self.bytewise is Stepper(_, incomplete) && incomplete() {
     let error = {
       encoding: self.encoding,
       valid_up_to: self.first,
